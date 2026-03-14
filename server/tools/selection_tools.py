@@ -46,8 +46,9 @@ def register(mcp: FastMCP):
 
     @mcp.tool()
     async def select_zero_crossing() -> dict:
-        """Adjust the current selection to the nearest zero crossings. Useful before cuts to avoid clicks."""
-        return await client.execute("SnapToOff")
+        """Adjust the current selection boundaries to the nearest zero crossings.
+        Useful before cuts to avoid audible clicks at edit points."""
+        return await client.execute("ZeroCross")
 
     @mcp.tool()
     async def select_clip() -> dict:

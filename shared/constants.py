@@ -19,7 +19,7 @@ class Timeouts:
     LONG_COMMAND = 600.0  # 10 minutes — large files (2-3hr podcasts) need this
 
 
-ALLOWED_EXPORT_FORMATS = {"wav", "mp3", "ogg", "flac", "aiff", "mp4", "wma"}
+ALLOWED_EXPORT_FORMATS = {"wav", "mp3", "ogg", "flac", "aiff", "mp4"}
 
 ALLOWED_SAMPLE_RATES = {8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000}
 

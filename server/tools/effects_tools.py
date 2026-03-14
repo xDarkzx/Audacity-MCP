@@ -10,10 +10,10 @@ def register(mcp: FastMCP):
         """Amplify the selected audio by a ratio. Select audio first.
 
         Args:
-            ratio: Amplification ratio (e.g. 1.5 = 150%, 0.5 = 50%). Default: 1.0
+            ratio: Amplification ratio (e.g. 1.5 = 150%, 0.5 = 50%). Must be > 0. Default: 1.0
         """
-        if ratio < 0:
-            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "ratio must be >= 0")
+        if ratio <= 0:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "ratio must be > 0")
         return await client.execute_long("Amplify", Ratio=ratio)
 
     @mcp.tool()
@@ -53,6 +53,14 @@ def register(mcp: FastMCP):
             stereo_width: Stereo width (0-100). Default: 100
             wet_only: Output only the wet signal. Default: False
         """
+        for name, val, lo, hi in [
+            ("room_size", room_size, 0, 100), ("pre_delay", pre_delay, 0, 200),
+            ("reverberance", reverberance, 0, 100), ("hf_damping", hf_damping, 0, 100),
+            ("tone_low", tone_low, 0, 100), ("tone_high", tone_high, 0, 100),
+            ("stereo_width", stereo_width, 0, 100),
+        ]:
+            if not lo <= val <= hi:
+                raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, f"{name} must be {lo}-{hi}")
         return await client.execute_long(
             "Reverb",
             RoomSize=room_size,
@@ -120,6 +128,10 @@ def register(mcp: FastMCP):
             curve_name: Name of the EQ preset curve. Default: "Default"
             length: Filter length (odd number, 21-8191). Default: 4001
         """
+        if not 21 <= length <= 8191:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "length must be 21-8191")
+        if length % 2 == 0:
+            raise AudacityMCPError(ErrorCode.INVALID_PARAMETER, "length must be an odd number")
         return await client.execute_long(
             "FilterCurve",
             CurveName=curve_name,
@@ -145,6 +157,18 @@ def register(mcp: FastMCP):
             depth: Modulation depth (0-255). Default: 100
             feedback: Feedback percentage (-100 to 100). Default: 0
         """
+        if not 2 <= stages <= 24 or stages % 2 != 0:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "stages must be even, 2-24")
+        if not 0 <= dry_wet <= 255:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "dry_wet must be 0-255")
+        if not 0.01 <= frequency <= 40:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "frequency must be 0.01-40")
+        if not 0 <= phase <= 360:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "phase must be 0-360")
+        if not 0 <= depth <= 255:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "depth must be 0-255")
+        if not -100 <= feedback <= 100:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "feedback must be -100 to 100")
         return await client.execute_long(
             "Phaser",
             Stages=stages,
@@ -172,6 +196,16 @@ def register(mcp: FastMCP):
             resonance: Resonance (0.1-10). Default: 2.5
             offset: Frequency offset (0-100). Default: 30
         """
+        if not 0.1 <= frequency <= 4.0:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "frequency must be 0.1-4.0")
+        if not 0 <= phase <= 360:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "phase must be 0-360")
+        if not 0 <= depth <= 100:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "depth must be 0-100")
+        if not 0.1 <= resonance <= 10:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "resonance must be 0.1-10")
+        if not 0 <= offset <= 100:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "offset must be 0-100")
         return await client.execute_long(
             "Wahwah",
             Freq=frequency,
@@ -190,8 +224,10 @@ def register(mcp: FastMCP):
 
         Args:
             distortion_type: Type of distortion. Default: "Hard Clipping"
-            threshold_db: Distortion threshold in dB. Default: -6.0
+            threshold_db: Distortion threshold in dB (-100 to 0). Default: -6.0
         """
+        if not -100 <= threshold_db <= 0:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "threshold_db must be -100 to 0")
         return await client.execute_long(
             "Distortion",
             Type=distortion_type,

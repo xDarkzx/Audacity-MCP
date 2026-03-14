@@ -16,7 +16,8 @@ def _validate_value(value: str) -> str:
 
 def _quote_value(value: str) -> str:
     if " " in value or '"' in value or "=" in value:
-        return f'"{value}"'
+        escaped = value.replace('"', '\\"')
+        return f'"{escaped}"'
     return value
 
 
@@ -50,7 +51,10 @@ def parse_response(raw: str) -> dict:
             if "OK" in line:
                 result["success"] = True
             else:
-                result["message"] = line
+                if result["message"]:
+                    result["message"] += "\n" + line
+                else:
+                    result["message"] = line
             continue
 
         if "=" in line:

@@ -15,6 +15,27 @@ _STEP_DELAY = 0.5
 
 # In-memory job store for background pipelines
 _jobs: dict[str, dict] = {}
+_MAX_COMPLETED_JOBS = 50
+_STALE_JOB_TIMEOUT = 600  # 10 minutes
+
+# Lock to prevent race condition in job creation
+_job_lock = asyncio.Lock()
+
+
+def _cleanup_stale_jobs():
+    """Kill jobs running longer than timeout, evict oldest completed jobs."""
+    now = time.time()
+    for job_id, job in list(_jobs.items()):
+        if job["status"] == "running" and (now - job["started_at"]) > _STALE_JOB_TIMEOUT:
+            job["status"] = "error"
+            job["error"] = "Timed out after 10 minutes — killed automatically"
+            job["current_step"] = "timed out"
+
+    completed = [(k, v) for k, v in _jobs.items() if v["status"] in ("complete", "error")]
+    if len(completed) > _MAX_COMPLETED_JOBS:
+        completed.sort(key=lambda x: x[1].get("started_at", 0))
+        for k, _ in completed[:-_MAX_COMPLETED_JOBS]:
+            del _jobs[k]
 
 
 def register(mcp: FastMCP):
@@ -36,23 +57,26 @@ def register(mcp: FastMCP):
     def _has_running_pipeline() -> bool:
         return any(j["status"] == "running" for j in _jobs.values())
 
-    def _create_job(pipeline_name: str) -> tuple[str, dict]:
-        """Create a job dict and return (job_id, job). Also checks for concurrent runs."""
-        if _has_running_pipeline():
-            return None, None
-        job_id = str(uuid.uuid4())[:8]
-        job = {
-            "status": "running",
-            "pipeline": pipeline_name,
-            "current_step": "starting",
-            "steps_applied": [],
-            "steps_failed": [],
-            "started_at": time.time(),
-            "result": None,
-            "error": None,
-        }
-        _jobs[job_id] = job
-        return job_id, job
+    async def _create_job(pipeline_name: str) -> tuple[str, dict]:
+        """Create a job dict and return (job_id, job). Also checks for concurrent runs.
+        Uses a lock to prevent race conditions from near-simultaneous calls."""
+        async with _job_lock:
+            _cleanup_stale_jobs()
+            if _has_running_pipeline():
+                return None, None
+            job_id = str(uuid.uuid4())[:8]
+            job = {
+                "status": "running",
+                "pipeline": pipeline_name,
+                "current_step": "starting",
+                "steps_applied": [],
+                "steps_failed": [],
+                "started_at": time.time(),
+                "result": None,
+                "error": None,
+            }
+            _jobs[job_id] = job
+            return job_id, job
 
     def _running_job_error() -> dict:
         """Return error dict when a pipeline is already running."""
@@ -135,7 +159,7 @@ def register(mcp: FastMCP):
     async def _measure_current_audio(job: dict) -> tuple[float | None, float | None]:
         """Export current audio to temp WAV and measure peak + noise floor.
         Returns (peak_db, noise_floor_db). Non-destructive — doesn't modify audio."""
-        tmp_wav = _ANALYZE_WAV
+        tmp_wav = _temp_wav_path()
         try:
             await _select_all()
             await client.execute_long("Export2", Filename=tmp_wav, NumChannels=1)
@@ -489,10 +513,6 @@ def register(mcp: FastMCP):
         }
         if job["status"] == "complete":
             result["result"] = job["result"]
-            if len(_jobs) > 10:
-                oldest = sorted(_jobs, key=lambda k: _jobs[k]["started_at"])
-                for k in oldest[:-10]:
-                    del _jobs[k]
         elif job["status"] == "error":
             result["error"] = job["error"]
         if job["steps_failed"]:
@@ -501,7 +521,9 @@ def register(mcp: FastMCP):
 
     # ── auto_analyze_audio (synchronous) ──────────────────────────────
 
-    _ANALYZE_WAV = os.path.join(tempfile.gettempdir(), "audacity_mcp_analyze.wav")
+    def _temp_wav_path() -> str:
+        """Generate a unique temp WAV path to avoid collisions between concurrent instances."""
+        return os.path.join(tempfile.gettempdir(), f"audacity_mcp_analyze_{uuid.uuid4().hex[:8]}.wav")
 
     def _measure_wav(wav_path: str) -> dict | None:
         """Read a WAV file and compute comprehensive audio diagnostics.
@@ -670,13 +692,22 @@ def register(mcp: FastMCP):
 
         IMPORTANT: Load your audio into Audacity before calling this.
         """
-        # Get track info
+        # Get track info — GetInfo returns JSON as a string in the message field
+        import json as _json
         info_result = await client.execute("GetInfo", Type="Tracks")
-        tracks = info_result.get("data", [])
+        tracks = []
+        raw_msg = info_result.get("message", "")
+        if raw_msg:
+            try:
+                parsed = _json.loads(raw_msg)
+                if isinstance(parsed, list):
+                    tracks = parsed
+            except (ValueError, TypeError):
+                pass
 
         track_info = []
         total_duration = 0
-        for t in (tracks if isinstance(tracks, list) else []):
+        for t in tracks:
             if not isinstance(t, dict):
                 continue
             start = t.get("start", 0)
@@ -693,7 +724,7 @@ def register(mcp: FastMCP):
         # Measure audio by exporting to temp WAV and analyzing in Python.
         # This avoids Nyquist entirely — no popups, no selection issues.
         measurements = None
-        tmp_wav = _ANALYZE_WAV
+        tmp_wav = _temp_wav_path()
         measurement_error = None
 
         try:
@@ -911,7 +942,7 @@ def register(mcp: FastMCP):
         IMPORTANT: If remove_noise is True, the first 0.5 seconds should be room tone / silence.
         DO NOT call this again if a pipeline is already running — use check_pipeline_status instead.
         """
-        job_id, job = _create_job("cleanup_audio")
+        job_id, job = await _create_job("cleanup_audio")
         if job is None:
             return _running_job_error()
         coro = _cleanup_audio_pipeline(job, remove_noise, remove_clicks)
@@ -969,7 +1000,7 @@ def register(mcp: FastMCP):
         IMPORTANT: If remove_noise is True, the first 0.5 seconds should be room tone / silence.
         DO NOT call this again if a pipeline is already running — use check_pipeline_status instead.
         """
-        job_id, job = _create_job("podcast_cleanup")
+        job_id, job = await _create_job("podcast_cleanup")
         if job is None:
             return _running_job_error()
         coro = _podcast_pipeline(job, remove_noise, remove_silence)
@@ -1033,7 +1064,7 @@ def register(mcp: FastMCP):
         IMPORTANT: If remove_noise is True, the first 0.5 seconds should be room tone / silence.
         DO NOT call this again if a pipeline is already running — use check_pipeline_status instead.
         """
-        job_id, job = _create_job("audiobook_mastering")
+        job_id, job = await _create_job("audiobook_mastering")
         if job is None:
             return _running_job_error()
         coro = _audiobook_pipeline(job, remove_noise)
@@ -1087,7 +1118,7 @@ def register(mcp: FastMCP):
         IMPORTANT: If remove_noise is True, the first 0.5 seconds should be room tone / silence.
         DO NOT call this again if a pipeline is already running — use check_pipeline_status instead.
         """
-        job_id, job = _create_job("interview_cleanup")
+        job_id, job = await _create_job("interview_cleanup")
         if job is None:
             return _running_job_error()
         coro = _interview_pipeline(job, remove_noise, remove_silence)
@@ -1135,7 +1166,7 @@ def register(mcp: FastMCP):
         IMPORTANT: If remove_noise is True, the first 0.5 seconds should be room tone / silence.
         DO NOT call this again if a pipeline is already running — use check_pipeline_status instead.
         """
-        job_id, job = _create_job("vocal_cleanup")
+        job_id, job = await _create_job("vocal_cleanup")
         if job is None:
             return _running_job_error()
         coro = _vocal_pipeline(job, remove_noise)
@@ -1179,7 +1210,7 @@ def register(mcp: FastMCP):
         IMPORTANT: The first 0.5 seconds MUST be room tone / ambient noise for noise profiling.
         DO NOT call this again if a pipeline is already running — use check_pipeline_status instead.
         """
-        job_id, job = _create_job("live_cleanup")
+        job_id, job = await _create_job("live_cleanup")
         if job is None:
             return _running_job_error()
         coro = _live_pipeline(job)
@@ -1241,7 +1272,7 @@ def register(mcp: FastMCP):
             noise_reduce: Apply gentle noise reduction. Default: False
         DO NOT call this again if a pipeline is already running — use check_pipeline_status instead.
         """
-        job_id, job = _create_job(f"mastering_{style}")
+        job_id, job = await _create_job(f"mastering_{style}")
         if job is None:
             return _running_job_error()
 
@@ -1366,7 +1397,7 @@ def register(mcp: FastMCP):
 
         DO NOT call this again if a pipeline is already running — use check_pipeline_status instead.
         """
-        job_id, job = _create_job(f"lofi_{intensity}")
+        job_id, job = await _create_job(f"lofi_{intensity}")
         if job is None:
             return _running_job_error()
 

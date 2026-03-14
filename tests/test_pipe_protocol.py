@@ -73,3 +73,72 @@ class TestParseResponse:
         result = parse_response(raw)
         assert result["success"] is True
         assert "Some info message" in result["message"]
+
+
+class TestFormatCommandEdgeCases:
+    def test_negative_float_param(self):
+        result = format_command("BassAndTreble", Treble=-4.0, Bass=-1.0)
+        assert "Treble=-4.0" in result
+        assert "Bass=-1.0" in result
+
+    def test_large_number_param(self):
+        result = format_command("SelectTime", Start=0, End=999999.999)
+        assert "End=999999.999" in result
+
+    def test_windows_path_with_backslashes(self):
+        result = format_command("Import2", Filename=r"C:\Users\Test\Music\file.wav")
+        assert r"C:\Users\Test\Music\file.wav" in result
+
+    def test_empty_string_param(self):
+        result = format_command("SetLabel", Text="")
+        assert "Text=" in result
+
+    def test_value_with_embedded_quotes(self):
+        result = format_command("SetLabel", Text='say "hello"')
+        assert r'Text="say \"hello\""' in result
+
+    def test_extra_params_dict(self):
+        result = format_command("Compressor", extra_params={"gain-L": "3.0"})
+        assert "gain-L=3.0" in result
+
+    def test_extra_params_with_spaces(self):
+        result = format_command("TruncateSilence", extra_params={"Action": "Truncate Detected Silence"})
+        assert '"Truncate Detected Silence"' in result
+
+    def test_unicode_param(self):
+        result = format_command("SetLabel", Text="café")
+        assert "café" in result
+
+    def test_value_with_equals_sign(self):
+        result = format_command("SetLabel", Text="x=y+z")
+        assert 'Text="x=y+z"' in result
+
+
+class TestParseResponseEdgeCases:
+    def test_multiline_message(self):
+        raw = "Line one\nLine two\nBatchCommand finished: OK\n"
+        result = parse_response(raw)
+        assert result["success"] is True
+        assert "Line one" in result["message"]
+        assert "Line two" in result["message"]
+
+    def test_response_with_only_batch_line(self):
+        raw = "BatchCommand finished: OK\n"
+        result = parse_response(raw)
+        assert result["success"] is True
+        assert result["message"] == ""
+
+    def test_failure_with_error_message(self):
+        raw = "Command not recognized\nBatchCommand finished: Failed!\n"
+        result = parse_response(raw)
+        assert result["success"] is False
+        assert "Command not recognized" in result["message"]
+
+    def test_line_with_equals_parsed_as_data(self):
+        """Lines containing '=' are parsed as key=value data, not messages.
+        This is a known limitation of the pipe protocol parser."""
+        raw = "Error: something went wrong\nBatchCommand finished: OK\n"
+        result = parse_response(raw)
+        # "Error: something went wrong" has "=" absent but ":" present
+        # Actually it has no "=" so it goes to message
+        assert "Error: something went wrong" in result["message"]

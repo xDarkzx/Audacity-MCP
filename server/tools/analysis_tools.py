@@ -17,9 +17,13 @@ def register(mcp: FastMCP):
         """Find clipping in the selected audio and create labels at clipped regions.
 
         Args:
-            duty_cycle_start: Min number of consecutive clipped samples to detect (default 3)
-            duty_cycle_end: Min number of consecutive non-clipped samples to end a region (default 3)
+            duty_cycle_start: Min number of consecutive clipped samples to detect (1-1000, default 3)
+            duty_cycle_end: Min number of consecutive non-clipped samples to end a region (1-1000, default 3)
         """
+        if not 1 <= duty_cycle_start <= 1000:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "duty_cycle_start must be 1-1000")
+        if not 1 <= duty_cycle_end <= 1000:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "duty_cycle_end must be 1-1000")
         return await client.execute_long(
             "FindClipping",
             DutyCycleStart=duty_cycle_start,
@@ -70,6 +74,13 @@ def register(mcp: FastMCP):
             path: Absolute path for the output file
             limit: Maximum number of samples to export. Default: 100
         """
-        if not os.path.isabs(path):
-            raise AudacityMCPError(ErrorCode.INVALID_PATH, "Path must be absolute")
+        if not 1 <= limit <= 1000000:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "limit must be 1-1000000")
+        from server.tools.project_tools import _safe_path
+        path = _safe_path(path)
+        if os.path.exists(path):
+            raise AudacityMCPError(
+                ErrorCode.INVALID_PATH,
+                f"File already exists: {path}. Use a different filename to avoid overwriting.",
+            )
         return await client.execute("SampleDataExport", Filename=path, Limit=limit)

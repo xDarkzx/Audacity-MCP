@@ -4,6 +4,39 @@ from shared.constants import ALLOWED_EXPORT_FORMATS
 from shared.error_codes import AudacityMCPError, ErrorCode
 
 
+_BLOCKED_DIRS = None
+
+
+def _get_blocked_dirs():
+    """Directories that should never be written to."""
+    global _BLOCKED_DIRS
+    if _BLOCKED_DIRS is None:
+        _BLOCKED_DIRS = set()
+        if os.name == "nt":
+            win_dir = os.environ.get("WINDIR", r"C:\Windows")
+            _BLOCKED_DIRS.add(os.path.realpath(win_dir).lower())
+            prog = os.environ.get("PROGRAMFILES", r"C:\Program Files")
+            _BLOCKED_DIRS.add(os.path.realpath(prog).lower())
+            prog86 = os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
+            _BLOCKED_DIRS.add(os.path.realpath(prog86).lower())
+    return _BLOCKED_DIRS
+
+
+def _safe_path(path: str) -> str:
+    """Validate and canonicalize a file path. Returns the resolved absolute path."""
+    if not os.path.isabs(path):
+        raise AudacityMCPError(ErrorCode.INVALID_PATH, "Path must be absolute")
+    resolved = os.path.realpath(path)
+    # Block system directories
+    for blocked in _get_blocked_dirs():
+        if resolved.lower().startswith(blocked + os.sep) or resolved.lower() == blocked:
+            raise AudacityMCPError(
+                ErrorCode.INVALID_PATH,
+                f"Cannot access system directory: {blocked}",
+            )
+    return resolved
+
+
 def register(mcp: FastMCP):
     from server.main import client
 
@@ -19,8 +52,7 @@ def register(mcp: FastMCP):
         Args:
             path: Absolute path to the .aup3 project file
         """
-        if not os.path.isabs(path):
-            raise AudacityMCPError(ErrorCode.INVALID_PATH, "Path must be absolute")
+        path = _safe_path(path)
         return await client.execute("OpenProject2", Filename=path)
 
     @mcp.tool()
@@ -37,8 +69,7 @@ def register(mcp: FastMCP):
         Args:
             path: Absolute path for the new .aup3 file
         """
-        if not os.path.isabs(path):
-            raise AudacityMCPError(ErrorCode.INVALID_PATH, "Path must be absolute")
+        path = _safe_path(path)
         return await client.execute("SaveProject2", Filename=path)
 
     @mcp.tool()
@@ -53,8 +84,7 @@ def register(mcp: FastMCP):
         Args:
             path: Absolute path to the audio file (wav, mp3, ogg, flac, etc.)
         """
-        if not os.path.isabs(path):
-            raise AudacityMCPError(ErrorCode.INVALID_PATH, "Path must be absolute")
+        path = _safe_path(path)
         return await client.execute("Import2", Filename=path)
 
     def _default_music_folder() -> str:
@@ -90,12 +120,11 @@ def register(mcp: FastMCP):
             path: Absolute path for exported file. Extension determines format (wav, mp3, ogg, flac, aiff).
             num_channels: Number of channels (1=mono, 2=stereo). Default: 2
         """
-        if not os.path.isabs(path):
-            raise AudacityMCPError(ErrorCode.INVALID_PATH, "Path must be absolute")
+        path = _safe_path(path)
         # Block saving directly to user home folder
-        home = os.path.expanduser("~")
-        parent = os.path.dirname(os.path.normpath(path))
-        if os.path.normpath(parent) == os.path.normpath(home):
+        home = os.path.realpath(os.path.expanduser("~"))
+        parent = os.path.dirname(path)
+        if os.path.realpath(parent) == home:
             raise AudacityMCPError(
                 ErrorCode.INVALID_PATH,
                 f"Do not save directly to the home folder. Use a subfolder like Music or Documents. "
@@ -106,6 +135,11 @@ def register(mcp: FastMCP):
             raise AudacityMCPError(
                 ErrorCode.INVALID_FORMAT,
                 f"Unsupported format: {ext}. Allowed: {', '.join(sorted(ALLOWED_EXPORT_FORMATS))}",
+            )
+        if os.path.exists(path):
+            raise AudacityMCPError(
+                ErrorCode.INVALID_PATH,
+                f"File already exists: {path}. Use a different filename to avoid overwriting.",
             )
         # Create output directory if it doesn't exist
         parent_dir = os.path.dirname(path)
@@ -120,8 +154,12 @@ def register(mcp: FastMCP):
         Args:
             path: Absolute path for the exported labels file
         """
-        if not os.path.isabs(path):
-            raise AudacityMCPError(ErrorCode.INVALID_PATH, "Path must be absolute")
+        path = _safe_path(path)
+        if os.path.exists(path):
+            raise AudacityMCPError(
+                ErrorCode.INVALID_PATH,
+                f"File already exists: {path}. Use a different filename to avoid overwriting.",
+            )
         return await client.execute("ExportLabels", Filename=path)
 
     @mcp.tool()

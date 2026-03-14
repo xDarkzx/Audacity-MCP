@@ -30,8 +30,8 @@ def register(mcp: FastMCP):
             raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "frequency must be 1-20000")
         if not 0 <= amplitude <= 1:
             raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "amplitude must be 0-1")
-        if duration <= 0:
-            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "duration must be > 0")
+        if not 0 < duration <= 3600:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "duration must be > 0 and <= 3600 (1 hour)")
         return await client.execute(
             "Tone",
             Waveform=waveform,
@@ -58,8 +58,8 @@ def register(mcp: FastMCP):
             raise AudacityMCPError(ErrorCode.INVALID_PARAMETER, f"noise_type must be one of: {', '.join(sorted(allowed))}")
         if not 0 <= amplitude <= 1:
             raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "amplitude must be 0-1")
-        if duration <= 0:
-            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "duration must be > 0")
+        if not 0 < duration <= 3600:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "duration must be > 0 and <= 3600 (1 hour)")
         return await client.execute(
             "Noise",
             Type=noise_type,
@@ -86,8 +86,8 @@ def register(mcp: FastMCP):
             end_amp: Ending amplitude (0-1). Default: 0.1
             duration: Duration in seconds. Default: 1.0
         """
-        if duration <= 0:
-            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "duration must be > 0")
+        if not 0 < duration <= 3600:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "duration must be > 0 and <= 3600 (1 hour)")
         return await client.execute(
             "Chirp",
             Waveform=waveform,

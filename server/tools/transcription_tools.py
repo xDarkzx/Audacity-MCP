@@ -12,9 +12,15 @@ _log = logging.getLogger("audacity_mcp.transcription")
 
 _model_instance = None
 _model_size_loaded = None
+_model_lock = __import__("threading").Lock()
 
 # Background jobs for transcription
 _jobs: dict[str, dict] = {}
+_MAX_COMPLETED_JOBS = 50
+_STALE_JOB_TIMEOUT = 600  # 10 minutes
+
+# Lock to prevent race condition in job creation
+_job_lock = asyncio.Lock()
 
 
 def _get_cache_dir() -> str:
@@ -61,7 +67,7 @@ def _setup_cuda_path():
             cublas_bin = os.path.join(os.path.dirname(nvidia.cublas.__file__), "bin")
             if cublas_bin not in os.environ.get("PATH", ""):
                 os.environ["PATH"] = cublas_bin + os.pathsep + os.environ.get("PATH", "")
-    except Exception:
+    except (ImportError, AttributeError, OSError):
         pass
     try:
         import nvidia.cudnn
@@ -69,7 +75,7 @@ def _setup_cuda_path():
             cudnn_bin = os.path.join(os.path.dirname(nvidia.cudnn.__file__), "bin")
             if cudnn_bin not in os.environ.get("PATH", ""):
                 os.environ["PATH"] = cudnn_bin + os.pathsep + os.environ.get("PATH", "")
-    except Exception:
+    except (ImportError, AttributeError, OSError):
         pass
 
 
@@ -85,27 +91,32 @@ def _cuda_is_available() -> bool:
 
 def _get_model(model_size: str):
     global _model_instance, _model_size_loaded
+    # Fast path — no lock needed for read-only check
     if _model_instance is not None and _model_size_loaded == model_size:
         return _model_instance
-    _setup_cuda_path()
-    from faster_whisper import WhisperModel
-    cache_dir = _get_cache_dir()
-    use_gpu = _cuda_is_available()
-    if use_gpu:
-        try:
-            _log.info(f"Loading whisper model '{model_size}' on GPU...")
-            _model_instance = WhisperModel(model_size, device="cuda", compute_type="float16",
+    with _model_lock:
+        # Re-check after acquiring lock (another thread may have loaded it)
+        if _model_instance is not None and _model_size_loaded == model_size:
+            return _model_instance
+        _setup_cuda_path()
+        from faster_whisper import WhisperModel
+        cache_dir = _get_cache_dir()
+        use_gpu = _cuda_is_available()
+        if use_gpu:
+            try:
+                _log.info(f"Loading whisper model '{model_size}' on GPU...")
+                _model_instance = WhisperModel(model_size, device="cuda", compute_type="float16",
+                                                download_root=cache_dir)
+                _log.info(f"Model '{model_size}' loaded on GPU")
+            except Exception as e:
+                _log.info(f"GPU failed ({e}), falling back to CPU...")
+                use_gpu = False
+        if not use_gpu:
+            _log.info(f"Loading whisper model '{model_size}' on CPU...")
+            _model_instance = WhisperModel(model_size, device="cpu", compute_type="int8",
                                             download_root=cache_dir)
-            _log.info(f"Model '{model_size}' loaded on GPU")
-        except Exception as e:
-            _log.info(f"GPU failed ({e}), falling back to CPU...")
-            use_gpu = False
-    if not use_gpu:
-        _log.info(f"Loading whisper model '{model_size}' on CPU...")
-        _model_instance = WhisperModel(model_size, device="cpu", compute_type="int8",
-                                        download_root=cache_dir)
-        _log.info(f"Model '{model_size}' loaded on CPU")
-    _model_size_loaded = model_size
+            _log.info(f"Model '{model_size}' loaded on CPU")
+        _model_size_loaded = model_size
     return _model_instance
 
 
@@ -230,6 +241,7 @@ def register(mcp: FastMCP):
                 temp_path = f.name
 
             if select_all:
+                await client.execute("SelAllTracks")
                 await client.execute("SelectAll")
             await client.execute_long("Export2", Filename=temp_path, NumChannels=1)
 
@@ -313,41 +325,49 @@ def register(mcp: FastMCP):
         return any(j["status"] == "running" for j in _jobs.values())
 
     def _cleanup_stale_jobs():
-        """Kill jobs that have been running for more than 10 minutes — they're stuck."""
+        """Kill jobs running longer than timeout, evict oldest completed jobs."""
         now = time.time()
         for job_id, job in list(_jobs.items()):
-            if job["status"] == "running" and (now - job["started_at"]) > 600:
+            if job["status"] == "running" and (now - job["started_at"]) > _STALE_JOB_TIMEOUT:
                 job["status"] = "error"
                 job["error"] = "Timed out after 10 minutes — killed automatically"
                 job["current_step"] = "timed out"
 
-    def _start_transcription(model_size: str, language: str | None, task: str,
-                              select_all: bool = True, add_labels: bool = False,
-                              export_path: str | None = None, export_format: str | None = None) -> dict:
+        completed = [(k, v) for k, v in _jobs.items() if v["status"] in ("complete", "error")]
+        if len(completed) > _MAX_COMPLETED_JOBS:
+            completed.sort(key=lambda x: x[1].get("started_at", 0))
+            for k, _ in completed[:-_MAX_COMPLETED_JOBS]:
+                del _jobs[k]
+
+    async def _start_transcription(model_size: str, language: str | None, task: str,
+                                    select_all: bool = True, add_labels: bool = False,
+                                    export_path: str | None = None, export_format: str | None = None) -> dict:
         _log.info("_start_transcription called")
-        _cleanup_stale_jobs()
+        async with _job_lock:
+            _cleanup_stale_jobs()
 
-        if _has_running_transcription():
-            running = next(j for j in _jobs.values() if j["status"] == "running")
-            running_id = next(k for k, v in _jobs.items() if v is running)
-            _log.info(f"Already running: {running_id}")
-            return {
-                "error": "A transcription is already running. Do NOT start another one.",
-                "job_id": running_id,
-                "current_step": running["current_step"],
-                "message": "Use check_transcription_status to monitor the existing job.",
+            if _has_running_transcription():
+                running = next(j for j in _jobs.values() if j["status"] == "running")
+                running_id = next(k for k, v in _jobs.items() if v is running)
+                _log.info(f"Already running: {running_id}")
+                return {
+                    "error": "A transcription is already running. Do NOT start another one.",
+                    "job_id": running_id,
+                    "current_step": running["current_step"],
+                    "message": "Use check_transcription_status to monitor the existing job.",
+                }
+
+            job_id = str(uuid.uuid4())[:8]
+            job = {
+                "status": "running",
+                "current_step": "starting",
+                "steps_completed": [],
+                "started_at": time.time(),
+                "result": None,
+                "error": None,
             }
+            _jobs[job_id] = job
 
-        job_id = str(uuid.uuid4())[:8]
-        job = {
-            "status": "running",
-            "current_step": "starting",
-            "steps_completed": [],
-            "started_at": time.time(),
-            "result": None,
-            "error": None,
-        }
-        _jobs[job_id] = job
         coro = _transcribe_background(job, model_size, language, task,
                                        select_all, add_labels, export_path, export_format)
         asyncio.create_task(coro)
@@ -385,7 +405,7 @@ def register(mcp: FastMCP):
         """
         _validate_model_size(model_size)
         _validate_task(task)
-        return _start_transcription(model_size, language, task, select_all=True)
+        return await _start_transcription(model_size, language, task, select_all=True)
 
     @mcp.tool()
     async def transcribe_selection(
@@ -408,7 +428,7 @@ def register(mcp: FastMCP):
         """
         _validate_model_size(model_size)
         _validate_task(task)
-        return _start_transcription(model_size, language, task, select_all=False)
+        return await _start_transcription(model_size, language, task, select_all=False)
 
     @mcp.tool()
     async def transcribe_to_labels(
@@ -426,7 +446,7 @@ def register(mcp: FastMCP):
             language: ISO language code or None for auto-detect
         """
         _validate_model_size(model_size)
-        return _start_transcription(model_size, language, "transcribe",
+        return await _start_transcription(model_size, language, "transcribe",
                                      select_all=True, add_labels=True)
 
     @mcp.tool()
@@ -452,15 +472,20 @@ def register(mcp: FastMCP):
             model_size: Whisper model - "tiny", "base", "small", "medium", "large-v3"
             language: ISO language code or None for auto-detect
         """
-        if not os.path.isabs(path):
-            raise AudacityMCPError(ErrorCode.INVALID_PATH, "Path must be absolute")
+        from server.tools.project_tools import _safe_path
+        path = _safe_path(path)
+        if os.path.exists(path):
+            raise AudacityMCPError(
+                ErrorCode.INVALID_PATH,
+                f"File already exists: {path}. Use a different filename to avoid overwriting.",
+            )
         if format not in SUBTITLE_FORMATS:
             raise AudacityMCPError(
                 ErrorCode.INVALID_FORMAT,
                 f"Invalid format '{format}'. Must be one of: {', '.join(sorted(SUBTITLE_FORMATS))}",
             )
         _validate_model_size(model_size)
-        return _start_transcription(model_size, language, "transcribe",
+        return await _start_transcription(model_size, language, "transcribe",
                                      select_all=True, export_path=path, export_format=format)
 
     @mcp.tool()
