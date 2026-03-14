@@ -46,7 +46,7 @@ Open Audacity → **Edit** → **Preferences** → **Modules** → set `mod-scri
   <img src="docs/images/mod-script-pipe-enable.png" alt="Enable mod-script-pipe in Audacity Preferences → Modules" width="600" />
 </p>
 
-> See [detailed instructions](docs/INSTALLATION.md#step-1-enable-mod-script-pipe-in-audacity) for more help.
+> **You must restart Audacity** after enabling this. The module only loads on startup.
 
 ### 2. Install AudacityMCP
 
@@ -58,7 +58,7 @@ pip install -e .
 
 ### 3. Configure your AI client
 
-Add to your MCP client config (e.g. Claude Desktop's `claude_desktop_config.json`):
+In **Claude Desktop**: open **Settings** → **Developer** → **Edit Config** to open `claude_desktop_config.json`, then add:
 
 ```json
 {
@@ -69,6 +69,8 @@ Add to your MCP client config (e.g. Claude Desktop's `claude_desktop_config.json
   }
 }
 ```
+
+> **Important:** Restart Claude Desktop after saving the config. The MCP server won't appear until you restart.
 
 <details>
 <summary>Alternative: run from source</summary>
@@ -84,6 +86,13 @@ Add to your MCP client config (e.g. Claude Desktop's `claude_desktop_config.json
   }
 }
 ```
+
+</details>
+
+<details>
+<summary>Other MCP clients (Cursor, Claude Code, etc.)</summary>
+
+Each client has its own config location — check your client's MCP documentation. The server command is the same: `audacity-mcp` (or `python -m server.main` from source).
 
 </details>
 
