@@ -968,8 +968,8 @@ def register(mcp: FastMCP):
                         Action="Truncate Detected Silence",
                     ))
 
-            # Compression: 3:1, threshold -18, attack 10ms, peak-based for voice
-            await _compress_step(job, threshold=-18.0, ratio=3.0, attack=0.01, release=1.0, use_peak=True)
+            # Compression: 3:1, threshold -18, attack 30ms, release 200ms, peak-based for voice
+            await _compress_step(job, threshold=-18.0, ratio=3.0, attack=0.03, release=0.2, use_peak=True)
 
             await _loudness_step(job)
 
@@ -987,7 +987,7 @@ def register(mcp: FastMCP):
         Runs in background — returns a job_id immediately. Use check_pipeline_status to monitor.
         Safe for badly recorded audio — only reduces peaks if too hot, never boosts.
 
-        Pipeline: DC offset > HPF 80Hz > NR 12dB > compress 3:1 > safe loudness check.
+        Pipeline: DC offset > HPF 80Hz > NR 12dB > compress 3:1 (30ms attack, 200ms release) > safe loudness check.
         Optional: noise reduction (on by default), silence truncation (off by default).
 
         After the pipeline finishes, the user can manually apply LUFS normalization
@@ -1017,23 +1017,23 @@ def register(mcp: FastMCP):
             if remove_noise:
                 await _noise_reduction_step(job, reduction_db=12, sensitivity=6, smoothing=3)
 
-            # Light compression for voice consistency
+            # Light compression for voice consistency (attack 10ms, release 1s for audiobook pacing)
             await _compress_step(job, threshold=-18.0, ratio=2.5, attack=0.01, release=1.0, use_peak=True)
 
             # Safe loudness: only reduce peaks if hot, never boost
             await _loudness_step(job)
 
-            # Peak cap at -3dB (ACX requirement: peaks must not exceed -3dB)
+            # Peak cap at -3.5dB (ACX requirement: peaks must not exceed -3dB, -3.5 gives safety margin)
             await asyncio.sleep(0.5)
             await _select_all()
-            await _run_pipeline_step(job, "peak cap -3dB",
+            await _run_pipeline_step(job, "peak cap -3.5dB",
                 client.execute_long(
                     "Limiter",
                     extra_params={
                         "type": "SoftLimit",
                         "gain-L": 0.0,
                         "gain-R": 0.0,
-                        "thresh": -3.0,
+                        "thresh": -3.5,
                         "hold": 10.0,
                         "makeup": "No",
                     },
@@ -1041,7 +1041,7 @@ def register(mcp: FastMCP):
 
             await _complete_job(job, "Audiobook Mastering Complete (ACX)", {
                 "rms": "-20 dB RMS",
-                "peak_cap": "-3 dB",
+                "peak_cap": "-3.5 dB",
                 "standard": "ACX/Audible compliant",
             })
         except Exception as e:
@@ -1055,8 +1055,8 @@ def register(mcp: FastMCP):
         """ONE-CLICK AUDIOBOOK MASTERING: ACX/Audible compliant processing.
         Runs in background — returns a job_id immediately. Use check_pipeline_status to monitor.
 
-        Pipeline: DC offset > HPF 80Hz > noise reduction 12dB > compression 2.5:1 > RMS -20dB > peak cap -3dB
-        Meets ACX requirements: RMS -23 to -18 dB, peaks below -3 dB, noise floor below -60 dB.
+        Pipeline: DC offset > HPF 80Hz > noise reduction 12dB > compression 2.5:1 > RMS -20dB > peak cap -3.5dB
+        Meets ACX requirements: RMS -23 to -18 dB, peaks below -3 dB (capped at -3.5 for safety margin), noise floor below -60 dB.
 
         Args:
             remove_noise: Apply noise reduction using first 0.5s as noise profile. Default: True
@@ -1090,8 +1090,8 @@ def register(mcp: FastMCP):
                         Action="Truncate Detected Silence",
                     ))
 
-            # Light compression — preserve natural dynamics of conversation
-            await _compress_step(job, threshold=-20.0, ratio=2.5, attack=0.02, release=1.0, use_peak=True)
+            # Light compression — preserve natural dynamics of conversation (200ms release)
+            await _compress_step(job, threshold=-20.0, ratio=2.5, attack=0.02, release=0.2, use_peak=True)
 
             await _loudness_step(job)
 
@@ -1185,8 +1185,8 @@ def register(mcp: FastMCP):
             await _run_pipeline_step(job, "click removal",
                 client.execute_long("ClickRemoval", Threshold=200, Width=20))
 
-            # Aggressive noise reduction — 18dB for noisy environments
-            await _noise_reduction_step(job, reduction_db=18, sensitivity=6, smoothing=3)
+            # Aggressive noise reduction — 12dB max to avoid artifacts
+            await _noise_reduction_step(job, reduction_db=12, sensitivity=6, smoothing=3)
 
             # Heavy compression — 5:1 to tame dynamic range of live recordings
             await _compress_step(job, threshold=-14.0, ratio=5.0, attack=0.01, release=0.5, use_peak=True)
@@ -1203,9 +1203,9 @@ def register(mcp: FastMCP):
         """ONE-CLICK LIVE RECORDING CLEANUP: Aggressive processing for noisy/field recordings.
         Runs in background — returns a job_id immediately. Use check_pipeline_status to monitor.
 
-        Pipeline: DC offset > HPF 100Hz > click removal > noise reduction 18dB > compression 5:1 > safe loudness check.
+        Pipeline: DC offset > HPF 100Hz > click removal > noise reduction 12dB > compression 5:1 > safe loudness check.
         Designed for live performances, field recordings, and noisy environments.
-        Noise reduction is always on at 18dB — this pipeline is for recordings that NEED aggressive cleanup.
+        Noise reduction is always on at 12dB — max safe level before artifacts appear.
 
         IMPORTANT: The first 0.5 seconds MUST be room tone / ambient noise for noise profiling.
         DO NOT call this again if a pipeline is already running — use check_pipeline_status instead.

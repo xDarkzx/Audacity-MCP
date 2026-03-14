@@ -21,7 +21,7 @@
 
 ---
 
-AudacityMCP connects any MCP-compatible AI assistant to [Audacity](https://www.audacityteam.org/), giving it full control over audio editing through 99 tools spanning effects, cleanup, mastering, transcription, and more. Talk to your AI assistant and it edits your audio in real-time.
+AudacityMCP connects any MCP-compatible AI assistant to [Audacity](https://www.audacityteam.org/), giving it full control over audio editing through 131 tools spanning effects, cleanup, mastering, transcription, and more. Talk to your AI assistant and it edits your audio in real-time.
 
 **No cloud. No API keys for audio processing. Everything runs locally through Audacity's named pipe interface.**
 
@@ -157,7 +157,7 @@ AI:   select region → reverb effect → export to FLAC
 
 ## Features
 
-### 99 Tools Across 11 Categories
+### 131 Tools Across 11 Categories
 
 | Category | Tools | Highlights |
 |----------|-------|------------|
@@ -316,15 +316,19 @@ Powered by [faster-whisper](https://github.com/SYSTRAN/faster-whisper) — runs 
 
 ---
 
-## What's New — v0.1.1
+## What's New — v0.1.3
 
-Security hardening and bug fixes. [Full changelog →](CHANGELOG.md)
+32 new tools (99 → 131), pipeline tuning fixes, and live-tested against Audacity.
 
-- **Security**: Path traversal protection, command injection fix, file overwrite protection
-- **Fixed**: `select_zero_crossing` called wrong command, `auto_analyze_audio` track parsing broken, transcription export incomplete on multi-track, error messages lost on failure
-- **Validation**: Range checks on 6 effects, 3 generators, 2 analyzers — bad values no longer crash Audacity
-- **Reliability**: Memory leak fix, race condition fix, thread-safe model loading, stale job timeouts
-- **Tests**: 41 → 60 tests
+- **New effects**: Reverse, Invert, Repair, AutoDuck, NotchFilter, VocalReduction, AdjustableFade, StudioFadeOut, CrossfadeClips, CrossfadeTracks, ClipFix, SlidingStretch, Tremolo
+- **New editing**: Split (in place), SplitCut, SplitDelete, Disjoin + renamed old split → `edit_split_new`
+- **New tracks**: StereoToMono, MixAndRenderToNew, MuteAll, UnmuteAll, Resample, AlignEndToEnd, AddLabelTrack
+- **New selection**: CursorToTrackStart/End, CursorToProjectStart/End, SelectCursorToTrackEnd
+- **New project**: EditMetadata, ImportMIDI
+- **New labels**: RegularIntervalLabels
+- **Pipeline fixes**: ACX peak cap -3.0→-3.5dB, live NR 18→12dB, podcast comp 10ms/1s→30ms/200ms, interview release 1s→200ms
+- **Bug fix**: `effect_repair` now uses long timeout (Audacity shows popup on invalid selection)
+- **Validation**: Added missing range checks on AutoDuck, VocalReduction, SlidingStretch, Resample
 
 ---
 
@@ -357,7 +361,7 @@ Security hardening and bug fixes. [Full changelog →](CHANGELOG.md)
 | Fix clipping | Run `auto_analyze_audio` first. If it detects clipping, use `auto_cleanup_audio` before other pipelines. |
 | Hit -14 LUFS for Spotify | Run a cleanup pipeline first, check the results look good, then ask the AI to apply `loudness_normalize` at -14 LUFS. |
 | Hit -16 LUFS for podcast | Same approach — cleanup first, LUFS second. |
-| ACX audiobook compliance | Use `auto_audiobook_mastering`. It targets RMS -20 dB with a -3 dB peak cap. |
+| ACX audiobook compliance | Use `auto_audiobook_mastering`. It targets RMS -20 dB with a -3.5 dB peak cap (safety margin). |
 | Quick cleanup without changing volume | Use `auto_cleanup_audio` — it only removes noise and artifacts, no loudness changes. |
 
 ### General Issues
@@ -481,7 +485,7 @@ Your support helps keep this project maintained and free for everyone.
 ## Documentation
 
 - **[Installation Guide](docs/INSTALLATION.md)** — Detailed setup for Windows, macOS, Linux
-- **[Tool Reference](docs/TOOLS.md)** — Complete reference for all 99 tools with parameters
+- **[Tool Reference](docs/TOOLS.md)** — Complete reference for all 131 tools with parameters and ranges
 - **[Contributing](CONTRIBUTING.md)** — How to add tools and contribute
 - **[Changelog](CHANGELOG.md)** — Version history and release notes
 

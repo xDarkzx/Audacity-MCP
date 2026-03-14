@@ -68,3 +68,25 @@ def register(mcp: FastMCP):
         if not os.path.isabs(path):
             raise AudacityMCPError(ErrorCode.INVALID_PATH, "Path must be absolute")
         return await client.execute("ExportLabels", Filename=path)
+
+    @mcp.tool()
+    async def label_regular_intervals(
+        interval: float = 30.0,
+        adjust: bool = False,
+        label_text: str = "",
+    ) -> dict:
+        """Create labels at regular time intervals across the selection or project.
+
+        Args:
+            interval: Time between labels in seconds. Default: 30
+            adjust: Adjust interval to fit selection evenly. Default: False
+            label_text: Text for each label (labels will be numbered). Default: empty
+        """
+        if interval <= 0:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "interval must be > 0")
+        if len(label_text) > MAX_LABEL_LENGTH:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, f"Label text too long (max {MAX_LABEL_LENGTH})")
+        params = {"Interval": interval, "Adjust": adjust}
+        if label_text:
+            params["Label"] = label_text
+        return await client.execute("RegularIntervalLabels", **params)

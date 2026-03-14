@@ -91,3 +91,44 @@ def register(mcp: FastMCP):
         if track < 0 or track >= MAX_TRACKS:
             raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, f"Track index must be 0-{MAX_TRACKS - 1}")
         return await client.execute("SelectTracks", Track=track, TrackCount=1)
+
+    @mcp.tool()
+    async def track_add_label() -> dict:
+        """Add a new empty label track to the project."""
+        return await client.execute("NewLabelTrack")
+
+    @mcp.tool()
+    async def track_stereo_to_mono() -> dict:
+        """Convert the selected stereo track to mono. Select the track first."""
+        return await client.execute_long("StereoToMono")
+
+    @mcp.tool()
+    async def track_mix_and_render_to_new() -> dict:
+        """Mix and render selected tracks into a new track, keeping the originals. Select tracks first."""
+        return await client.execute_long("MixAndRenderToNewTrack")
+
+    @mcp.tool()
+    async def track_mute_all() -> dict:
+        """Mute all tracks in the project."""
+        return await client.execute("MuteAllTracks")
+
+    @mcp.tool()
+    async def track_unmute_all() -> dict:
+        """Unmute all tracks in the project."""
+        return await client.execute("UnmuteAllTracks")
+
+    @mcp.tool()
+    async def track_resample(rate: int = 44100) -> dict:
+        """Resample the selected track to a new sample rate.
+
+        Args:
+            rate: Target sample rate in Hz (e.g. 44100, 48000, 96000). Must be > 0.
+        """
+        if not 1 <= rate <= 384000:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "rate must be 1-384000 Hz")
+        return await client.execute("Resample", Rate=rate)
+
+    @mcp.tool()
+    async def track_align_end_to_end() -> dict:
+        """Align selected tracks end-to-end (sequentially). Select the tracks first."""
+        return await client.execute("Align_EndToEnd")

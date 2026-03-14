@@ -17,7 +17,7 @@ class TestToolRegistration:
 
         # Access internal tool manager directly to avoid async list_tools
         tool_count = len(mcp._tool_manager._tools)
-        assert tool_count >= 99, f"Expected at least 99 tools, got {tool_count}"
+        assert tool_count >= 131, f"Expected at least 131 tools, got {tool_count}"
 
 
 class TestValidation:

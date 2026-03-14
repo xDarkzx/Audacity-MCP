@@ -326,3 +326,225 @@ def register(mcp: FastMCP):
             Treble=treble,
             Gain=gain,
         )
+
+    @mcp.tool()
+    async def effect_reverse() -> dict:
+        """Reverse the selected audio. Select a region first."""
+        return await client.execute_long("Reverse")
+
+    @mcp.tool()
+    async def effect_invert() -> dict:
+        """Invert (flip phase) the selected audio. Useful for phase cancellation."""
+        return await client.execute("Invert")
+
+    @mcp.tool()
+    async def effect_repair() -> dict:
+        """Repair a very short damaged section of audio (max 128 samples).
+        Select the damaged region first — must be extremely short.
+        Audacity will show an error popup if the selection is too long."""
+        return await client.execute_long("Repair")
+
+    @mcp.tool()
+    async def effect_auto_duck(
+        duck_amount_db: float = -12.0,
+        inner_fade_down_len: float = 0.0,
+        inner_fade_up_len: float = 0.0,
+        outer_fade_down_len: float = 0.5,
+        outer_fade_up_len: float = 0.5,
+        threshold_db: float = -30.0,
+        maximum_pause: float = 1.0,
+    ) -> dict:
+        """Auto Duck: automatically reduce volume when audio is detected on another track.
+        Place the control track (e.g. narration) above the track to duck (e.g. music).
+        Select the track to duck before running.
+
+        Args:
+            duck_amount_db: How much to reduce volume in dB (-24 to 0). Default: -12
+            inner_fade_down_len: Inner fade down length in seconds (>= 0). Default: 0
+            inner_fade_up_len: Inner fade up length in seconds (>= 0). Default: 0
+            outer_fade_down_len: Outer fade down length in seconds (>= 0). Default: 0.5
+            outer_fade_up_len: Outer fade up length in seconds (>= 0). Default: 0.5
+            threshold_db: Threshold for duck trigger in dB (-100 to 0). Default: -30
+            maximum_pause: Maximum pause between ducking regions in seconds (>= 0). Default: 1.0
+        """
+        if not -24 <= duck_amount_db <= 0:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "duck_amount_db must be -24 to 0")
+        for name, val in [
+            ("inner_fade_down_len", inner_fade_down_len),
+            ("inner_fade_up_len", inner_fade_up_len),
+            ("outer_fade_down_len", outer_fade_down_len),
+            ("outer_fade_up_len", outer_fade_up_len),
+            ("maximum_pause", maximum_pause),
+        ]:
+            if val < 0:
+                raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, f"{name} must be >= 0")
+        if not -100 <= threshold_db <= 0:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "threshold_db must be -100 to 0")
+        return await client.execute_long(
+            "AutoDuck",
+            DuckAmountDb=duck_amount_db,
+            InnerFadeDownLen=inner_fade_down_len,
+            InnerFadeUpLen=inner_fade_up_len,
+            OuterFadeDownLen=outer_fade_down_len,
+            OuterFadeUpLen=outer_fade_up_len,
+            ThresholdDb=threshold_db,
+            MaximumPause=maximum_pause,
+        )
+
+    @mcp.tool()
+    async def effect_notch_filter(
+        frequency: float = 60.0,
+        q: float = 1.0,
+    ) -> dict:
+        """Remove a specific frequency (e.g. 50/60Hz hum) with a notch filter.
+
+        Args:
+            frequency: Center frequency to remove in Hz. Default: 60 (US mains hum)
+            q: Q factor / sharpness of the notch (0.1-20). Higher = narrower notch. Default: 1.0
+        """
+        if frequency <= 0:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "frequency must be > 0")
+        if not 0.1 <= q <= 20:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "q must be 0.1-20")
+        return await client.execute_long(
+            "NotchFilter",
+            Frequency=frequency,
+            Q=q,
+        )
+
+    @mcp.tool()
+    async def effect_vocal_reduction(
+        action: int = 0,
+        low_cutoff: float = 120.0,
+        high_cutoff: float = 9000.0,
+        strength: float = 1.0,
+    ) -> dict:
+        """Vocal Reduction and Isolation: remove or isolate vocals from a stereo track.
+
+        Args:
+            action: 0=Remove Vocals, 1=Isolate Vocals, 2=Remove Vocals (Mono),
+                    3=Isolate Vocals (Mono), 4=Remove Center, 5=Isolate Center. Default: 0
+            low_cutoff: Low frequency cutoff in Hz. Default: 120
+            high_cutoff: High frequency cutoff in Hz. Default: 9000
+            strength: Effect strength (0-50). Default: 1.0
+        """
+        if not 0 <= action <= 5:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "action must be 0-5")
+        if low_cutoff <= 0:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "low_cutoff must be > 0")
+        if high_cutoff <= low_cutoff:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "high_cutoff must be > low_cutoff")
+        if not 0 <= strength <= 50:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "strength must be 0-50")
+        return await client.execute_long(
+            "VocalReductionAndIsolation",
+            Action=action,
+            LowCutoff=low_cutoff,
+            HighCutoff=high_cutoff,
+            Strength=strength,
+        )
+
+    @mcp.tool()
+    async def effect_adjustable_fade(
+        fade_type: int = 0,
+        curve: float = 0.0,
+    ) -> dict:
+        """Apply an adjustable fade with curve control.
+
+        Args:
+            fade_type: 0=fade up (in), 1=fade down (out). Default: 0
+            curve: Curve shape (0=linear, positive=exponential, negative=logarithmic). Default: 0
+        """
+        if fade_type not in (0, 1):
+            raise AudacityMCPError(ErrorCode.INVALID_PARAMETER, "fade_type must be 0 (up) or 1 (down)")
+        return await client.execute_long(
+            "AdjustableFade",
+            type=fade_type,
+            curve=curve,
+        )
+
+    @mcp.tool()
+    async def effect_studio_fade_out() -> dict:
+        """Apply a professional studio-quality fade out to the selected audio.
+        Uses a specially shaped curve that sounds more natural than a linear fade."""
+        return await client.execute_long("StudioFadeOut")
+
+    @mcp.tool()
+    async def effect_crossfade_clips() -> dict:
+        """Crossfade between two adjacent clips on the same track.
+        Select the junction point between two clips first."""
+        return await client.execute("CrossfadeClips")
+
+    @mcp.tool()
+    async def effect_crossfade_tracks() -> dict:
+        """Crossfade between two overlapping tracks.
+        Align the tracks so they overlap, select both, then run this effect."""
+        return await client.execute_long("CrossfadeTracks")
+
+    @mcp.tool()
+    async def effect_clip_fix(
+        threshold: float = 95.0,
+    ) -> dict:
+        """Attempt to repair clipped (distorted) audio by reconstructing peaks.
+
+        Args:
+            threshold: Clipping threshold as percentage of max amplitude (0-100). Default: 95
+        """
+        if not 0 <= threshold <= 100:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "threshold must be 0-100")
+        return await client.execute_long("ClipFix", threshold=threshold)
+
+    @mcp.tool()
+    async def effect_sliding_stretch(
+        rate_change_start: float = 0.0,
+        rate_change_end: float = 0.0,
+        pitch_change_start: float = 0.0,
+        pitch_change_end: float = 0.0,
+    ) -> dict:
+        """Change tempo and/or pitch gradually across the selection (sliding time stretch).
+
+        Args:
+            rate_change_start: Tempo change at start in % (-99 to 3000). Default: 0
+            rate_change_end: Tempo change at end in % (-99 to 3000). Default: 0
+            pitch_change_start: Pitch change at start in semitones (-12 to 12). Default: 0
+            pitch_change_end: Pitch change at end in semitones (-12 to 12). Default: 0
+        """
+        for name, val in [("rate_change_start", rate_change_start), ("rate_change_end", rate_change_end)]:
+            if not -99 <= val <= 3000:
+                raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, f"{name} must be -99 to 3000")
+        for name, val in [("pitch_change_start", pitch_change_start), ("pitch_change_end", pitch_change_end)]:
+            if not -12 <= val <= 12:
+                raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, f"{name} must be -12 to 12")
+        return await client.execute_long(
+            "SlidingStretch",
+            RatePercentChangeStart=rate_change_start,
+            RatePercentChangeEnd=rate_change_end,
+            PitchHalfStepsStart=pitch_change_start,
+            PitchHalfStepsEnd=pitch_change_end,
+        )
+
+    @mcp.tool()
+    async def effect_tremolo(
+        frequency: float = 5.0,
+        depth: float = 40.0,
+        waveform: int = 0,
+    ) -> dict:
+        """Apply tremolo (volume oscillation) effect to the selected audio.
+
+        Args:
+            frequency: Tremolo speed in Hz (1-1000). Default: 5
+            depth: Tremolo depth as percentage (0-100). Default: 40
+            waveform: 0=Sine, 1=Triangle, 2=Sawtooth, 3=InverseSawtooth, 4=Square. Default: 0
+        """
+        if not 1 <= frequency <= 1000:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "frequency must be 1-1000")
+        if not 0 <= depth <= 100:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "depth must be 0-100")
+        if not 0 <= waveform <= 4:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "waveform must be 0-4")
+        return await client.execute_long(
+            "Tremolo",
+            Frequency=frequency,
+            Depth=depth,
+            Waveform=waveform,
+        )

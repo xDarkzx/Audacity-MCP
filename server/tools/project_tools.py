@@ -176,3 +176,19 @@ def register(mcp: FastMCP):
                 f"Invalid info_type: {info_type}. Allowed: {', '.join(sorted(allowed))}",
             )
         return await client.execute("GetInfo", Type=info_type)
+
+    @mcp.tool()
+    async def project_edit_metadata() -> dict:
+        """Open the metadata editor dialog to view/edit track metadata (title, artist, etc.).
+        This opens a modal dialog in Audacity — the command waits until the user closes it."""
+        return await client.execute_long("EditMetaData")
+
+    @mcp.tool()
+    async def project_import_midi(path: str) -> dict:
+        """Import a MIDI file into the current project.
+
+        Args:
+            path: Absolute path to the MIDI file (.mid, .midi)
+        """
+        path = _safe_path(path)
+        return await client.execute("ImportMIDI", Filename=path)

@@ -25,9 +25,29 @@ def register(mcp: FastMCP):
         return await client.execute("Delete")
 
     @mcp.tool()
-    async def edit_split() -> dict:
-        """Split the selected audio into a new clip at the selection boundaries."""
+    async def edit_split_new() -> dict:
+        """Split the selected audio into a new track at the selection boundaries."""
         return await client.execute("SplitNew")
+
+    @mcp.tool()
+    async def edit_split() -> dict:
+        """Split the clip at the cursor position or selection boundaries (in place, no new track)."""
+        return await client.execute("Split")
+
+    @mcp.tool()
+    async def edit_split_cut() -> dict:
+        """Cut the selected audio without closing the gap (leaves silence where audio was)."""
+        return await client.execute("SplitCut")
+
+    @mcp.tool()
+    async def edit_split_delete() -> dict:
+        """Delete the selected audio without closing the gap (leaves silence where audio was)."""
+        return await client.execute("SplitDelete")
+
+    @mcp.tool()
+    async def edit_disjoin() -> dict:
+        """Split the selected audio at detected silences, creating separate clips."""
+        return await client.execute("Disjoin")
 
     @mcp.tool()
     async def edit_join() -> dict:

@@ -65,3 +65,28 @@ def register(mcp: FastMCP):
         if time < 0:
             raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "Time must be >= 0")
         return await client.execute("SelectTime", Start=time, End=time)
+
+    @mcp.tool()
+    async def cursor_to_track_start() -> dict:
+        """Move the cursor to the start of the selected track."""
+        return await client.execute("CursTrackStart")
+
+    @mcp.tool()
+    async def cursor_to_track_end() -> dict:
+        """Move the cursor to the end of the selected track."""
+        return await client.execute("CursTrackEnd")
+
+    @mcp.tool()
+    async def cursor_to_project_start() -> dict:
+        """Move the cursor to the start of the project (time 0)."""
+        return await client.execute("CursProjectStart")
+
+    @mcp.tool()
+    async def cursor_to_project_end() -> dict:
+        """Move the cursor to the end of the project (last audio)."""
+        return await client.execute("CursProjectEnd")
+
+    @mcp.tool()
+    async def select_cursor_to_track_end() -> dict:
+        """Select from the current cursor position to the end of the track."""
+        return await client.execute("SelCursorToTrackEnd")
