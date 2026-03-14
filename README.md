@@ -5,12 +5,18 @@
 </p>
 
 <p align="center">
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green.svg" alt="License" /></a>
+  <a href="https://github.com/xDarkzx/Audacity-MCP/releases"><img src="https://img.shields.io/github/v/release/xDarkzx/Audacity-MCP" alt="Release" /></a>
+  <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-compatible-purple.svg" alt="MCP Compatible" /></a>
+</p>
+
+<p align="center">
   <a href="#quick-start">Quick Start</a> &bull;
-  <a href="docs/INSTALLATION.md">Installation</a> &bull;
+  <a href="#why-audacitymcp">Why AudacityMCP?</a> &bull;
   <a href="#pipelines">Pipelines</a> &bull;
   <a href="docs/TOOLS.md">Tool Reference</a> &bull;
-  <a href="#troubleshooting">Troubleshooting</a> &bull;
-  <a href="#support">Support</a>
+  <a href="#troubleshooting">Troubleshooting</a>
 </p>
 
 ---
@@ -18,6 +24,104 @@
 AudacityMCP connects any MCP-compatible AI assistant to [Audacity](https://www.audacityteam.org/), giving it full control over audio editing through 99 tools spanning effects, cleanup, mastering, transcription, and more. Talk to your AI assistant and it edits your audio in real-time.
 
 **No cloud. No API keys for audio processing. Everything runs locally through Audacity's named pipe interface.**
+
+### Works With
+
+AudacityMCP works with any AI client that supports the [Model Context Protocol](https://modelcontextprotocol.io):
+
+- [Claude Desktop](https://claude.ai/download) — Anthropic's desktop app
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — CLI agent
+- [Cursor](https://www.cursor.com/) — AI code editor with MCP support
+- Any other [MCP-compatible client](https://modelcontextprotocol.io/clients)
+
+---
+
+## Quick Start
+
+### 1. Enable mod-script-pipe in Audacity
+
+Open Audacity → **Edit** → **Preferences** → **Modules** → set `mod-script-pipe` to **Enabled** → restart Audacity.
+
+> See [detailed instructions with screenshots](docs/INSTALLATION.md#step-1-enable-mod-script-pipe-in-audacity) if you can't find it.
+
+### 2. Install AudacityMCP
+
+```bash
+git clone https://github.com/xDarkzx/Audacity-MCP.git
+cd Audacity-MCP
+pip install -e .
+```
+
+### 3. Configure your AI client
+
+Add to your MCP client config (e.g. Claude Desktop's `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "audacity": {
+      "command": "audacity-mcp"
+    }
+  }
+}
+```
+
+<details>
+<summary>Alternative: run from source</summary>
+
+```json
+{
+  "mcpServers": {
+    "audacity": {
+      "command": "python",
+      "args": ["-m", "server.main"],
+      "cwd": "/path/to/Audacity-MCP"
+    }
+  }
+}
+```
+
+</details>
+
+### 4. Start editing
+
+Open Audacity, load some audio, then talk to your AI:
+
+```
+"Clean up this podcast recording"
+"Master this track for Spotify, it's EDM"
+"Transcribe this and add labels at each sentence"
+"Add reverb with a large room, then export as FLAC"
+```
+
+> **Audacity must be open first.** AudacityMCP communicates through Audacity's named pipe — it can't launch Audacity for you.
+
+> See the full [Installation Guide](docs/INSTALLATION.md) for detailed setup on all platforms and MCP clients.
+
+---
+
+## Why AudacityMCP?
+
+**Without AudacityMCP:** You manually navigate menus, tweak effect parameters by ear, apply effects one at a time, look up ACX specs, and repeat until it sounds right.
+
+**With AudacityMCP:** You describe what you want in plain English and the AI handles the rest — picking the right effects, setting industry-standard parameters, and chaining operations together.
+
+| | Manual Audacity | With AudacityMCP |
+|---|---|---|
+| **Podcast cleanup** | 5+ steps across different menus, guessing compressor settings | *"Clean up this podcast"* — one sentence |
+| **Music mastering** | Research genre-appropriate EQ/compression, apply each manually | *"Master this for Spotify, it's hip-hop"* — genre-tuned presets |
+| **Noise removal** | Effect → Noise Reduction → Get Profile → select all → apply | *"Remove the background noise"* — automatic profiling |
+| **Batch operations** | Repetitive menu navigation for each operation | Describe the full chain and watch it happen |
+| **Transcription** | Export audio, use external tool, import results back | *"Transcribe this and add labels"* — stays in Audacity |
+| **Learning curve** | Know which effects exist and what parameters to use | Just describe the result you want |
+
+AudacityMCP is especially useful for:
+- **Podcasters** who want consistent, professional sound without audio engineering knowledge
+- **Musicians** who need quick mastering with genre-appropriate settings
+- **Content creators** working with interviews, voiceovers, or field recordings
+- **Anyone** who'd rather describe what they want than click through menus
+
+---
 
 ## What Can It Do?
 
@@ -199,65 +303,15 @@ Powered by [faster-whisper](https://github.com/SYSTRAN/faster-whisper) — runs 
 
 ---
 
-## Quick Start
+## What's New — v0.1.1
 
-### Prerequisites
+Security hardening and bug fixes. [Full changelog →](CHANGELOG.md)
 
-- **Python 3.10+**
-- **Audacity 3.x** with `mod-script-pipe` enabled ([how to enable](docs/INSTALLATION.md#step-1-enable-mod-script-pipe-in-audacity))
-
-### Install
-
-```bash
-git clone https://github.com/xDarkzx/Audacity-MCP.git
-cd AudacityMCP
-pip install -e .
-```
-
-### Configure Your MCP Client
-
-Add to your MCP client config (e.g. `claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "audacity": {
-      "command": "audacity-mcp"
-    }
-  }
-}
-```
-
-Or if running from source:
-
-```json
-{
-  "mcpServers": {
-    "audacity": {
-      "command": "python",
-      "args": ["-m", "server.main"],
-      "cwd": "/path/to/AudacityMCP"
-    }
-  }
-}
-```
-
-### Use It
-
-> **Audacity must be open first.** AudacityMCP cannot launch Audacity for you — open it yourself, load your audio, then chat with your AI client.
-
-1. Open **Audacity** (make sure `mod-script-pipe` is enabled)
-2. Open your MCP client (Claude Desktop, Claude Code, Cursor, etc.)
-3. Start talking:
-
-```
-"Import song.wav, apply reverb with a large room, then export as FLAC"
-"Clean up this podcast - the first half second is just room noise"
-"Analyze this audio and tell me what pipeline to use"
-"Transcribe this and add labels at each sentence"
-```
-
-> See the full [Installation Guide](docs/INSTALLATION.md) for detailed setup on all platforms and MCP clients.
+- **Security**: Path traversal protection, command injection fix, file overwrite protection
+- **Fixed**: `select_zero_crossing` called wrong command, `auto_analyze_audio` track parsing broken, transcription export incomplete on multi-track, error messages lost on failure
+- **Validation**: Range checks on 6 effects, 3 generators, 2 analyzers — bad values no longer crash Audacity
+- **Reliability**: Memory leak fix, race condition fix, thread-safe model loading, stale job timeouts
+- **Tests**: 41 → 60 tests
 
 ---
 
@@ -350,8 +404,7 @@ AudacityMCP/
 │   ├── constants.py            # Pipe paths, timeouts, allowed formats
 │   ├── error_codes.py          # Typed error codes (pipe/command/validation)
 │   └── pipe_protocol.py        # Command formatting and response parsing
-├── tests/
-│   └── ...                     # 40 tests
+├── tests/                      # 60 tests
 ├── docs/
 │   ├── INSTALLATION.md         # Detailed setup guide
 │   └── TOOLS.md                # Complete tool reference
@@ -417,6 +470,7 @@ Your support helps keep this project maintained and free for everyone.
 - **[Installation Guide](docs/INSTALLATION.md)** — Detailed setup for Windows, macOS, Linux
 - **[Tool Reference](docs/TOOLS.md)** — Complete reference for all 99 tools with parameters
 - **[Contributing](CONTRIBUTING.md)** — How to add tools and contribute
+- **[Changelog](CHANGELOG.md)** — Version history and release notes
 
 ## License
 
