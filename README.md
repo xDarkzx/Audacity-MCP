@@ -57,7 +57,8 @@ pip install -e .
 
 </details>
 
-### 2. Enable mod-script-pipe in Audacity
+<details>
+<summary>Enable mod-script-pipe in Audacity (required once)</summary>
 
 Open Audacity → **Edit** → **Preferences** → **Modules** → set `mod-script-pipe` to **Enabled** → restart Audacity.
 
@@ -66,6 +67,8 @@ Open Audacity → **Edit** → **Preferences** → **Modules** → set `mod-scri
 </p>
 
 > **You must restart Audacity** after enabling this. The module only loads on startup.
+
+</details>
 
 ### 3. Configure your AI client
 
