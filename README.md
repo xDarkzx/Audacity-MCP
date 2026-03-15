@@ -25,6 +25,8 @@ AudacityMCP connects any MCP-compatible AI assistant to [Audacity](https://www.a
 
 **No cloud. No API keys for audio processing. Everything runs locally through Audacity's named pipe interface.**
 
+> **Compatibility:** AudacityMCP currently works with **Audacity 3.x** only. Audacity 4.x is not yet supported — we hope to add support in the future.
+
 ### Works With
 
 AudacityMCP works with any AI client that supports the [Model Context Protocol](https://modelcontextprotocol.io):
