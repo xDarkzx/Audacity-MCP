@@ -38,27 +38,18 @@ AudacityMCP works with any AI client that supports the [Model Context Protocol](
 
 ## Quick Start
 
-### 1. Install AudacityMCP
+### 1. Get AudacityMCP
 
-```bash
-pip install audacity-mcp
-```
+**Option A:** Click the green **Code** button above → **Download ZIP** → extract to a folder
 
-Or use the **one-click installer**: [Windows (`install.bat`)](install.bat) | [macOS/Linux (`install.sh`)](install.sh) — handles install + Claude Desktop config automatically.
-
-<details>
-<summary>Install from source (for developers)</summary>
-
+**Option B:** Clone with git:
 ```bash
 git clone https://github.com/xDarkzx/Audacity-MCP.git
-cd Audacity-MCP
-pip install -e .
 ```
 
-</details>
+### 2. Enable mod-script-pipe in Audacity (important!)
 
-<details>
-<summary>Enable mod-script-pipe in Audacity (required once)</summary>
+> **You must do this before AudacityMCP can talk to Audacity.** The installer will try to enable it automatically, but if Audacity has never been opened before it won't have a config file yet.
 
 Open Audacity → **Edit** → **Preferences** → **Modules** → set `mod-script-pipe` to **Enabled** → restart Audacity.
 
@@ -66,13 +57,19 @@ Open Audacity → **Edit** → **Preferences** → **Modules** → set `mod-scri
   <img src="docs/images/mod-script-pipe-enable.png" alt="Enable mod-script-pipe in Audacity Preferences → Modules" width="600" />
 </p>
 
-> **You must restart Audacity** after enabling this. The module only loads on startup.
+### 3. Run the installer (sets up everything else automatically)
 
-</details>
+Open the folder and run:
 
-### 3. Configure your AI client
+- **Windows:** Double-click `install.bat`
+- **macOS / Linux:** Open terminal in the folder and run `bash install.sh`
 
-In **Claude Desktop**: open **Settings** → **Developer** → **Edit Config** to open `claude_desktop_config.json`, then add:
+> The installer does 3 things: installs `audacity-mcp` from PyPI, enables mod-script-pipe (if Audacity config exists), and **configures Claude Desktop** — no manual JSON editing needed.
+
+<details>
+<summary>Other MCP clients (Cursor, Claude Code, etc.)</summary>
+
+If you're not using Claude Desktop, install manually with `pip install audacity-mcp` and add to your client's MCP config:
 
 ```json
 {
@@ -84,29 +81,7 @@ In **Claude Desktop**: open **Settings** → **Developer** → **Edit Config** t
 }
 ```
 
-> **Important:** Restart Claude Desktop after saving the config. The MCP server won't appear until you restart.
-
-<details>
-<summary>Alternative: run from source</summary>
-
-```json
-{
-  "mcpServers": {
-    "audacity": {
-      "command": "python",
-      "args": ["-m", "server.main"],
-      "cwd": "/path/to/Audacity-MCP"
-    }
-  }
-}
-```
-
-</details>
-
-<details>
-<summary>Other MCP clients (Cursor, Claude Code, etc.)</summary>
-
-Each client has its own config location — check your client's MCP documentation. The server command is the same: `audacity-mcp` (or `python -m server.main` from source).
+Check your client's MCP documentation for the config file location.
 
 </details>
 

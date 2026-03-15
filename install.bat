@@ -9,7 +9,7 @@ echo  ============================================
 echo.
 
 :: ── Check Python ──────────────────────────────────────────
-echo [1/4] Checking Python...
+echo [1/5] Checking Python...
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
@@ -83,7 +83,7 @@ if defined VIRTUAL_ENV (
 
 :: Check if pip is available
 echo.
-echo [2/4] Installing audacity-mcp from PyPI...
+echo [2/5] Installing audacity-mcp from PyPI...
 python -m pip --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo   pip not found, installing pip...
@@ -108,9 +108,59 @@ if %errorlevel% neq 0 (
 )
 echo   audacity-mcp installed successfully!
 
+:: ── Enable mod-script-pipe in Audacity ──────────────────────
+echo.
+echo [3/5] Enabling mod-script-pipe in Audacity...
+
+set "AUD_CFG=%APPDATA%\audacity\audacity.cfg"
+
+if not exist "%AUD_CFG%" (
+    echo   Audacity config not found at: %AUD_CFG%
+    echo   You may need to open Audacity once first to generate the config,
+    echo   then run this installer again.
+    echo.
+    echo   Or enable it manually: Edit ^> Preferences ^> Modules ^> mod-script-pipe ^> Enabled
+    goto :skip_audacity
+)
+
+:: Check if already enabled
+findstr /c:"mod-script-pipe=1" "%AUD_CFG%" >nul 2>&1
+if !errorlevel! equ 0 (
+    echo   mod-script-pipe is already enabled - skipping.
+    goto :skip_audacity
+)
+
+:: Ask permission before modifying Audacity config
+echo.
+echo   AudacityMCP needs mod-script-pipe enabled to control Audacity.
+set /p ENABLE_PIPE="  Would you like to modify the Audacity config to allow MCP access? (y/n): "
+if /i not "!ENABLE_PIPE!"=="y" (
+    echo.
+    echo   Skipped. You can enable it manually:
+    echo   Edit ^> Preferences ^> Modules ^> mod-script-pipe ^> Enabled
+    goto :skip_audacity
+)
+
+:: Back up Audacity config
+copy "%AUD_CFG%" "%AUD_CFG%.bak" >nul 2>&1
+
+:: Check if the setting exists but is disabled (0 or 2)
+findstr /c:"mod-script-pipe=" "%AUD_CFG%" >nul 2>&1
+if !errorlevel! equ 0 (
+    :: Replace existing setting with enabled
+    python -c "p='%AUD_CFG%'.replace('\\','\\\\'); f=open(p,'r'); t=f.read(); f.close(); t=t.replace('mod-script-pipe=0','mod-script-pipe=1').replace('mod-script-pipe=2','mod-script-pipe=1'); f=open(p,'w'); f.write(t); f.close(); print('  mod-script-pipe enabled!')"
+) else (
+    :: Setting doesn't exist - need to add it in the right section
+    python -c "import re; p='%AUD_CFG%'.replace('\\','\\\\'); f=open(p,'r'); t=f.read(); f.close(); t=re.sub(r'(\[ModulePath\])', r'mod-script-pipe=1\n\1', t, count=1) if '[ModulePath]' in t else t+'\nmod-script-pipe=1\n'; f=open(p,'w'); f.write(t); f.close(); print('  mod-script-pipe enabled!')"
+)
+
+echo   NOTE: Restart Audacity for this to take effect.
+
+:skip_audacity
+
 :: ── Configure Claude Desktop ──────────────────────────────
 echo.
-echo [3/4] Configuring Claude Desktop...
+echo [4/5] Configuring Claude Desktop...
 
 set "CONFIG_DIR=%APPDATA%\Claude"
 set "CONFIG_FILE=%CONFIG_DIR%\claude_desktop_config.json"
@@ -161,23 +211,17 @@ echo   %CONFIG_FILE%
 
 :: ── Done ──────────────────────────────────────────────────
 echo.
-echo [4/4] Almost done!
+echo [5/5] Done!
 echo.
 echo  ============================================
 echo   SETUP COMPLETE!
 echo  ============================================
 echo.
-echo  Before you start, enable Audacity's scripting plugin:
+echo  Next steps:
 echo.
-echo   1. Open Audacity
-echo   2. Edit ^> Preferences ^> Modules
-echo   3. Set mod-script-pipe to "Enabled"
-echo   4. Click OK and RESTART Audacity
-echo.
-echo  Then:
-echo   1. Open Audacity (with mod-script-pipe enabled)
-echo   2. Open Claude Desktop (restart it if already open)
-echo   3. Ask: "Get info about the current Audacity project"
+echo   1. Restart Audacity (if it's open)
+echo   2. Restart Claude Desktop (if it's open)
+echo   3. Ask Claude: "Get info about the current Audacity project"
 echo.
 echo  If you see project info, you're all set!
 echo.

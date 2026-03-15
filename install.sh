@@ -9,7 +9,7 @@ echo " ============================================"
 echo ""
 
 # ── Check Python ──────────────────────────────────────────
-echo "[1/4] Checking Python..."
+echo "[1/5] Checking Python..."
 if command -v python3 &> /dev/null; then
     PYTHON=python3
 elif command -v python &> /dev/null; then
@@ -96,7 +96,7 @@ fi
 
 # ── Install audacity-mcp from PyPI ────────────────────────
 echo ""
-echo "[2/4] Installing audacity-mcp from PyPI..."
+echo "[2/5] Installing audacity-mcp from PyPI..."
 
 # Check if pip is available
 if ! $PYTHON -m pip --version &> /dev/null; then
@@ -120,9 +120,64 @@ if ! $PYTHON -m pip install audacity-mcp; then
 fi
 echo "  audacity-mcp installed successfully!"
 
+# ── Enable mod-script-pipe in Audacity ────────────────────
+echo ""
+echo "[3/5] Enabling mod-script-pipe in Audacity..."
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    AUD_CFG="$HOME/Library/Application Support/audacity/audacity.cfg"
+else
+    AUD_CFG="${XDG_CONFIG_HOME:-$HOME/.config}/audacity/audacity.cfg"
+fi
+
+if [ ! -f "$AUD_CFG" ]; then
+    echo "  Audacity config not found at: $AUD_CFG"
+    echo "  You may need to open Audacity once first to generate the config,"
+    echo "  then run this installer again."
+    echo ""
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "  Or enable it manually: Audacity > Preferences > Modules > mod-script-pipe > Enabled"
+    else
+        echo "  Or enable it manually: Edit > Preferences > Modules > mod-script-pipe > Enabled"
+    fi
+elif grep -q "mod-script-pipe=1" "$AUD_CFG" 2>/dev/null; then
+    echo "  mod-script-pipe is already enabled - skipping."
+else
+    echo ""
+    echo "  AudacityMCP needs mod-script-pipe enabled to control Audacity."
+    read -rp "  Would you like to modify the Audacity config to allow MCP access? (y/n): " ENABLE_PIPE
+    if [[ ! "$ENABLE_PIPE" =~ ^[Yy]$ ]]; then
+        echo ""
+        echo "  Skipped. You can enable it manually:"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            echo "  Audacity > Preferences > Modules > mod-script-pipe > Enabled"
+        else
+            echo "  Edit > Preferences > Modules > mod-script-pipe > Enabled"
+        fi
+    else
+        # Back up Audacity config
+        cp "$AUD_CFG" "$AUD_CFG.bak"
+
+        if grep -q "mod-script-pipe=" "$AUD_CFG" 2>/dev/null; then
+            # Replace existing setting
+            sed -i.tmp 's/mod-script-pipe=[02]/mod-script-pipe=1/' "$AUD_CFG"
+            rm -f "$AUD_CFG.tmp"
+        elif grep -q '\[ModulePath\]' "$AUD_CFG" 2>/dev/null; then
+            # Add before [ModulePath] section
+            sed -i.tmp 's/\[ModulePath\]/mod-script-pipe=1\n[ModulePath]/' "$AUD_CFG"
+            rm -f "$AUD_CFG.tmp"
+        else
+            # Append to end
+            echo "mod-script-pipe=1" >> "$AUD_CFG"
+        fi
+        echo "  mod-script-pipe enabled!"
+        echo "  NOTE: Restart Audacity for this to take effect."
+    fi
+fi
+
 # ── Configure Claude Desktop ──────────────────────────────
 echo ""
-echo "[3/4] Configuring Claude Desktop..."
+echo "[4/5] Configuring Claude Desktop..."
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     CONFIG_DIR="$HOME/Library/Application Support/Claude"
@@ -168,28 +223,19 @@ fi
 
 # ── Done ──────────────────────────────────────────────────
 echo ""
-echo "[4/4] Almost done!"
+echo "[5/5] Done!"
 echo ""
 echo " ============================================"
 echo "  SETUP COMPLETE!"
 echo " ============================================"
 echo ""
-echo " Before you start, enable Audacity's scripting plugin:"
+echo " Next steps:"
 echo ""
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    echo "  1. Open Audacity"
-    echo "  2. Audacity > Preferences > Modules"
-else
-    echo "  1. Open Audacity"
-    echo "  2. Edit > Preferences > Modules"
-fi
-echo "  3. Set mod-script-pipe to \"Enabled\""
-echo "  4. Click OK and RESTART Audacity"
+echo "  1. Restart Audacity (if it's open)"
+echo "  2. Restart Claude Desktop (if it's open)"
+echo "  3. Ask Claude: \"Get info about the current Audacity project\""
 echo ""
-echo " Then:"
-echo "  1. Open Audacity (with mod-script-pipe enabled)"
-echo "  2. Open Claude Desktop (restart if already open)"
-echo "  3. Ask: \"Get info about the current Audacity project\""
+echo " If you see project info, you're all set!"
 echo ""
 echo " Docs: https://github.com/xDarkzx/Audacity-MCP"
 echo " ============================================"
