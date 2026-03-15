@@ -20,40 +20,42 @@ That's it. The plugin creates named pipes that AudacityMCP connects to automatic
 
 ## Step 2: Install AudacityMCP
 
+### Option A: One-click installer (easiest)
+
+- **Windows:** Download [`install.bat`](../install.bat) from the repo → double-click it
+- **macOS / Linux:** Run this in your terminal:
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/xDarkzx/Audacity-MCP/main/install.sh | bash
+  ```
+
+The installer handles Steps 2 and 3 for you — skip to [Verify It Works](#verify-it-works).
+
+### Option B: pip install from PyPI (recommended)
+
+```bash
+pip install audacity-mcp
+```
+
+That's it. This gives you the `audacity-mcp` command. No git clone needed.
+
+### Option C: From source (for developers)
+
+<details>
+<summary>Click to expand</summary>
+
 ```bash
 git clone https://github.com/xDarkzx/Audacity-MCP.git
 cd AudacityMCP
 pip install -e .
 ```
 
-This gives you the `audacity-mcp` command. Verify it installed:
-
-```bash
-audacity-mcp --help
-```
-
-<details>
-<summary>Alternative: run from source without installing</summary>
-
-```bash
-git clone https://github.com/xDarkzx/Audacity-MCP.git
-cd AudacityMCP
-pip install mcp[cli] faster-whisper
-python -m server.main
-```
-
 When running from source, use `python -m server.main` anywhere this guide says `audacity-mcp`.
 
-</details>
-
-<details>
-<summary>Alternative: install with dev/test dependencies</summary>
+To include dev/test dependencies:
 
 ```bash
 pip install -e ".[dev]"
 ```
-
-Adds `pytest` and `pytest-asyncio` for running the test suite.
 
 </details>
 
@@ -65,7 +67,7 @@ Pick your client below. Each section shows the **complete config file** — copy
 
 **Option A: Installed with pip** (recommended — simplest config)
 
-If you ran `pip install -e .` in Step 2, your config is just:
+If you installed via `pip install audacity-mcp` or the one-click installer, your config is just:
 
 ```json
 {
@@ -205,7 +207,7 @@ The `command` field tells your AI client **what program to run** — it can't be
 
 If you didn't pip install, you need the full Python path in `command` because the AI client needs to know where Python is on your system. The `cwd` tells it where the AudacityMCP code lives.
 
-**TL;DR:** Run `pip install -e .` and your config is just `"command": "audacity-mcp"` — no paths needed.
+**TL;DR:** Run `pip install audacity-mcp` and your config is just `"command": "audacity-mcp"` — no paths needed.
 
 ---
 

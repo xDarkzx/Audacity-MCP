@@ -2,6 +2,29 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [0.1.4] - 2026-03-16
+
+### Easy Setup
+
+- **One-click installer**: Added `install.bat` (Windows) and `install.sh` (macOS/Linux) that automatically install from PyPI and configure Claude Desktop — no git clone, no manual JSON editing.
+- **`pip install audacity-mcp`** is now the primary install method (was previously git clone + `pip install -e .`).
+- **README rewritten** to lead with one-click install and `pip install` from PyPI. Manual git clone steps moved to a collapsible section.
+- **Installation guide updated**: Three clear options — one-click (easiest), pip install (recommended), from source (developers).
+
+### Documentation
+
+- Fixed tool counts in README: updated from 96 to 131 tools across all categories.
+- Fixed test count in project structure: updated from 40 to 60 tests.
+- Updated all references from `pip install -e .` to `pip install audacity-mcp`.
+
+## [0.1.3] - 2026-03-15
+
+### Added
+
+- Added 32 new tools (99 → 131 total) across effects, editing, tracks, selection, transcription, and labels
+- Fixed pipeline settings
+- Live-tested on production audio
+
 ## [0.1.1] - 2026-03-15
 
 ### Security

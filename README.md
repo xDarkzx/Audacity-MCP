@@ -51,10 +51,21 @@ Open Audacity → **Edit** → **Preferences** → **Modules** → set `mod-scri
 ### 2. Install AudacityMCP
 
 ```bash
+pip install audacity-mcp
+```
+
+Or use the **one-click installer**: [Windows (`install.bat`)](install.bat) | [macOS/Linux (`install.sh`)](install.sh) — handles install + Claude Desktop config automatically.
+
+<details>
+<summary>Install from source (for developers)</summary>
+
+```bash
 git clone https://github.com/xDarkzx/Audacity-MCP.git
 cd Audacity-MCP
 pip install -e .
 ```
+
+</details>
 
 ### 3. Configure your AI client
 
@@ -161,17 +172,17 @@ AI:   select region → reverb effect → export to FLAC
 
 | Category | Tools | Highlights |
 |----------|-------|------------|
-| **Effects** | 17 | Reverb, echo, pitch shift, tempo change, EQ, phaser, distortion, paulstretch, HPF/LPF, bass & treble |
-| **Cleanup & Mastering** | 18 | Noise reduction, compressor, 9 one-click pipelines, analysis tool |
-| **Editing** | 9 | Cut, copy, paste, split, join, trim, silence, duplicate |
-| **Project** | 10 | New, open, save, import/export (WAV, MP3, FLAC, OGG, AIFF) |
-| **Track** | 8 | Add mono/stereo, remove, set properties, mix & render, mute/solo |
-| **Selection** | 7 | Select all/none/region/tracks, zero crossing, cursor positioning |
+| **Effects** | 30 | Reverb, echo, pitch shift, tempo change, EQ, phaser, distortion, paulstretch, HPF/LPF, bass & treble, tremolo, wahwah |
+| **Cleanup & Mastering** | 18 | Noise reduction, compressor, limiter, 9 one-click pipelines, analysis tool |
+| **Editing** | 13 | Cut, copy, paste, split, join, trim, silence, duplicate, undo, redo |
+| **Project** | 12 | New, open, save, import/export (WAV, MP3, FLAC, OGG, AIFF) |
+| **Track** | 15 | Add mono/stereo, remove, set properties, mix & render, mute/solo, pan, volume |
+| **Selection** | 12 | Select all/none/region/tracks, zero crossing, cursor positioning |
 | **Transport** | 7 | Play, stop, pause, record, play region, get position |
 | **Analysis** | 6 | Contrast, clipping detection, spectrum, beat finder, sound labeling |
 | **Generation** | 5 | Tone, noise, chirp, DTMF, rhythm track |
 | **Transcription** (Experimental) | 7 | Full/selection transcribe, to labels, to SRT/VTT/TXT, model preload |
-| **Labels** | 5 | Add, add at time, get all, import/export |
+| **Labels** | 6 | Add, add at time, get all, edit, import/export |
 
 ---
 
