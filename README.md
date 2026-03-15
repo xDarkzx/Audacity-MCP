@@ -38,17 +38,7 @@ AudacityMCP works with any AI client that supports the [Model Context Protocol](
 
 ## Quick Start
 
-### 1. Enable mod-script-pipe in Audacity
-
-Open Audacity → **Edit** → **Preferences** → **Modules** → set `mod-script-pipe` to **Enabled** → restart Audacity.
-
-<p align="center">
-  <img src="docs/images/mod-script-pipe-enable.png" alt="Enable mod-script-pipe in Audacity Preferences → Modules" width="600" />
-</p>
-
-> **You must restart Audacity** after enabling this. The module only loads on startup.
-
-### 2. Install AudacityMCP
+### 1. Install AudacityMCP
 
 ```bash
 pip install audacity-mcp
@@ -66,6 +56,16 @@ pip install -e .
 ```
 
 </details>
+
+### 2. Enable mod-script-pipe in Audacity
+
+Open Audacity → **Edit** → **Preferences** → **Modules** → set `mod-script-pipe` to **Enabled** → restart Audacity.
+
+<p align="center">
+  <img src="docs/images/mod-script-pipe-enable.png" alt="Enable mod-script-pipe in Audacity Preferences → Modules" width="600" />
+</p>
+
+> **You must restart Audacity** after enabling this. The module only loads on startup.
 
 ### 3. Configure your AI client
 
