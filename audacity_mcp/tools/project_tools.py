@@ -1,7 +1,7 @@
 import os
 from mcp.server.fastmcp import FastMCP
-from shared.constants import ALLOWED_EXPORT_FORMATS
-from shared.error_codes import AudacityMCPError, ErrorCode
+from audacity_mcp_shared.constants import ALLOWED_EXPORT_FORMATS
+from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
 
 
 _BLOCKED_DIRS = None
@@ -38,7 +38,7 @@ def _safe_path(path: str) -> str:
 
 
 def register(mcp: FastMCP):
-    from server.main import client
+    from audacity_mcp.main import client
 
     @mcp.tool()
     async def project_new() -> dict:

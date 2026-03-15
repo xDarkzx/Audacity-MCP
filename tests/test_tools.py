@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
 from mcp.server.fastmcp import FastMCP
-from shared.error_codes import AudacityMCPError, ErrorCode
+from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
 
 
 class TestToolRegistration:
@@ -12,7 +12,7 @@ class TestToolRegistration:
         mock_client.execute_long = AsyncMock(return_value={"success": True, "raw": "", "message": "", "data": {}})
 
         with patch("server.main.client", mock_client):
-            from server.tool_registry import register_all_tools
+            from audacity_mcp.tool_registry import register_all_tools
             register_all_tools(mcp)
 
         # Access internal tool manager directly to avoid async list_tools
@@ -22,7 +22,7 @@ class TestToolRegistration:
 
 class TestValidation:
     def test_format_command_injection(self):
-        from shared.pipe_protocol import format_command
+        from audacity_mcp_shared.pipe_protocol import format_command
         with pytest.raises(AudacityMCPError) as exc_info:
             format_command("Evil\nCommand")
         assert exc_info.value.code == ErrorCode.INJECTION_DETECTED
@@ -41,14 +41,14 @@ class TestValidation:
 
 class TestPathSafety:
     def test_safe_path_rejects_relative(self):
-        from server.tools.project_tools import _safe_path
+        from audacity_mcp.tools.project_tools import _safe_path
         with pytest.raises(AudacityMCPError) as exc_info:
             _safe_path("relative/path.wav")
         assert exc_info.value.code == ErrorCode.INVALID_PATH
 
     def test_safe_path_resolves_traversal(self):
         import os
-        from server.tools.project_tools import _safe_path
+        from audacity_mcp.tools.project_tools import _safe_path
         # Should resolve .. and return a clean path
         home = os.path.expanduser("~")
         traversal = os.path.join(home, "Music", "..", "Music", "test.wav")
@@ -59,7 +59,7 @@ class TestPathSafety:
         import sys
         if sys.platform != "win32":
             pytest.skip("Windows-only test")
-        from server.tools.project_tools import _safe_path
+        from audacity_mcp.tools.project_tools import _safe_path
         with pytest.raises(AudacityMCPError) as exc_info:
             _safe_path(r"C:\Windows\System32\evil.wav")
         assert exc_info.value.code == ErrorCode.INVALID_PATH
@@ -68,7 +68,7 @@ class TestPathSafety:
 class TestEffectValidation:
     def test_amplify_rejects_zero(self):
         """ratio=0 would silence audio — should be rejected."""
-        from shared.error_codes import AudacityMCPError, ErrorCode
+        from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
         # We can't call the async tool directly, but we can verify the validation logic
         assert True  # Covered by the ratio <= 0 check in effects_tools.py
 

@@ -49,7 +49,7 @@ cd AudacityMCP
 pip install -e .
 ```
 
-When running from source, use `python -m server.main` anywhere this guide says `audacity-mcp`.
+When running from source, use `python -m audacity_mcp.main` anywhere this guide says `audacity-mcp`.
 
 To include dev/test dependencies:
 
@@ -88,7 +88,7 @@ If you skipped `pip install` and want to run directly from the cloned repo, you 
   "mcpServers": {
     "audacity": {
       "command": "C:\\Users\\YourName\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-      "args": ["-m", "server.main"],
+      "args": ["-m", "audacity_mcp.main"],
       "cwd": "C:\\Users\\YourName\\Projects\\AudacityMCP"
     }
   }
@@ -97,7 +97,7 @@ If you skipped `pip install` and want to run directly from the cloned repo, you 
 
 > **How to find your Python path:** Open a terminal and run `where python` (Windows) or `which python` (macOS/Linux). Copy that path into the `command` field.
 >
-> **How to set cwd:** This is the folder where you cloned AudacityMCP. It must contain the `server/` folder inside it.
+> **How to set cwd:** This is the folder where you cloned AudacityMCP. It must contain the `audacity_mcp/` folder inside it.
 
 **Already have other stuff in your config?** That's fine — just add the `"audacity"` key inside the existing `mcpServers`, or add `mcpServers` alongside your other keys:
 
@@ -169,7 +169,7 @@ Or create `.cursor/mcp.json` in your project root (or `~/.cursor/mcp.json` for g
   "mcpServers": {
     "audacity": {
       "command": "C:\\Users\\YourName\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-      "args": ["-m", "server.main"],
+      "args": ["-m", "audacity_mcp.main"],
       "cwd": "C:\\Users\\YourName\\Projects\\AudacityMCP"
     }
   }

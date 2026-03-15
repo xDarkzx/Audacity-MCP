@@ -1,8 +1,8 @@
 import sys
 import pytest
 from unittest.mock import patch, MagicMock
-from server.audacity_client import AudacityClient
-from shared.error_codes import AudacityMCPError, ErrorCode
+from audacity_mcp.audacity_client import AudacityClient
+from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
 
 
 @pytest.fixture
@@ -13,7 +13,7 @@ def client():
 IS_WIN = sys.platform == "win32"
 
 if IS_WIN:
-    from server.audacity_client import INVALID_HANDLE_VALUE
+    from audacity_mcp.audacity_client import INVALID_HANDLE_VALUE
 
 
 class TestClientPipes:

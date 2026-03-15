@@ -1,9 +1,9 @@
 from mcp.server.fastmcp import FastMCP
-from shared.error_codes import AudacityMCPError, ErrorCode
+from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
 
 
 def register(mcp: FastMCP):
-    from server.main import client
+    from audacity_mcp.main import client
 
     @mcp.tool()
     async def select_all() -> dict:

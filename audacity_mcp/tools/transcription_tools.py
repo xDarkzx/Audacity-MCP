@@ -5,8 +5,8 @@ import tempfile
 import time
 import uuid
 from mcp.server.fastmcp import FastMCP
-from shared.error_codes import AudacityMCPError, ErrorCode
-from shared.constants import WHISPER_MODEL_SIZES, TRANSCRIPTION_TASKS, SUBTITLE_FORMATS
+from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
+from audacity_mcp_shared.constants import WHISPER_MODEL_SIZES, TRANSCRIPTION_TASKS, SUBTITLE_FORMATS
 
 _log = logging.getLogger("audacity_mcp.transcription")
 
@@ -172,7 +172,7 @@ def _segments_to_txt(segments: list[dict]) -> str:
 
 
 def register(mcp: FastMCP):
-    from server.main import client
+    from audacity_mcp.main import client
 
     @mcp.tool()
     async def get_default_transcription_folder() -> dict:
@@ -472,7 +472,7 @@ def register(mcp: FastMCP):
             model_size: Whisper model - "tiny", "base", "small", "medium", "large-v3"
             language: ISO language code or None for auto-detect
         """
-        from server.tools.project_tools import _safe_path
+        from audacity_mcp.tools.project_tools import _safe_path
         path = _safe_path(path)
         if os.path.exists(path):
             raise AudacityMCPError(

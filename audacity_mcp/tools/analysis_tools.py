@@ -1,10 +1,10 @@
 import os
 from mcp.server.fastmcp import FastMCP
-from shared.error_codes import AudacityMCPError, ErrorCode
+from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
 
 
 def register(mcp: FastMCP):
-    from server.main import client
+    from audacity_mcp.main import client
 
     @mcp.tool()
     async def analyze_contrast() -> dict:
@@ -76,7 +76,7 @@ def register(mcp: FastMCP):
         """
         if not 1 <= limit <= 1000000:
             raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "limit must be 1-1000000")
-        from server.tools.project_tools import _safe_path
+        from audacity_mcp.tools.project_tools import _safe_path
         path = _safe_path(path)
         if os.path.exists(path):
             raise AudacityMCPError(

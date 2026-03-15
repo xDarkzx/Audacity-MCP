@@ -1,10 +1,10 @@
 from mcp.server.fastmcp import FastMCP
-from shared.error_codes import AudacityMCPError, ErrorCode
-from shared.constants import MAX_TRACKS
+from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
+from audacity_mcp_shared.constants import MAX_TRACKS
 
 
 def register(mcp: FastMCP):
-    from server.main import client
+    from audacity_mcp.main import client
 
     @mcp.tool()
     async def track_add_mono() -> dict:

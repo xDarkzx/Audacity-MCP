@@ -37,7 +37,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["server", "shared"]
+packages = ["audacity_mcp", "audacity_mcp_shared"]
 
 [project.scripts]
-audacity-mcp = "server.main:main"
+audacity-mcp = "audacity_mcp.main:main"

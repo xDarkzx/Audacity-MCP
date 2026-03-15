@@ -8,7 +8,7 @@ import uuid
 import wave
 
 from mcp.server.fastmcp import FastMCP
-from shared.error_codes import AudacityMCPError, ErrorCode
+from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
 
 # Delay between pipeline steps to let Audacity fully process each effect
 _STEP_DELAY = 0.5
@@ -39,7 +39,7 @@ def _cleanup_stale_jobs():
 
 
 def register(mcp: FastMCP):
-    from server.main import client
+    from audacity_mcp.main import client
 
     # ── Shared helpers ────────────────────────────────────────────────
 

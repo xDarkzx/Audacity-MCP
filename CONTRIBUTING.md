@@ -20,7 +20,7 @@ All tests must pass before submitting a PR.
 
 ## Adding a New Tool
 
-1. Choose the appropriate module in `server/tools/` (or create a new one)
+1. Choose the appropriate module in `audacity_mcp/tools/` (or create a new one)
 2. Add your tool inside the `register(mcp)` function using the `@mcp.tool()` decorator
 3. Validate all inputs — use `AudacityMCPError` with appropriate error codes
 4. Use `client.execute()` for fast commands or `client.execute_long()` for effects that process audio

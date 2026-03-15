@@ -1,11 +1,11 @@
 import os
 from mcp.server.fastmcp import FastMCP
-from shared.error_codes import AudacityMCPError, ErrorCode
-from shared.constants import MAX_LABEL_LENGTH
+from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
+from audacity_mcp_shared.constants import MAX_LABEL_LENGTH
 
 
 def register(mcp: FastMCP):
-    from server.main import client
+    from audacity_mcp.main import client
 
     @mcp.tool()
     async def label_add(text: str = "") -> dict:

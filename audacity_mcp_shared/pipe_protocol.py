@@ -1,5 +1,5 @@
 import re
-from shared.error_codes import AudacityMCPError, ErrorCode
+from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
 
 
 _DANGEROUS_CHARS = re.compile(r"[\n\r\x00]")

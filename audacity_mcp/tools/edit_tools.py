@@ -2,7 +2,7 @@ from mcp.server.fastmcp import FastMCP
 
 
 def register(mcp: FastMCP):
-    from server.main import client
+    from audacity_mcp.main import client
 
     @mcp.tool()
     async def edit_cut() -> dict:

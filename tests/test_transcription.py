@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock, PropertyMock
-from shared.error_codes import AudacityMCPError, ErrorCode
+from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
 
 
 class FakeSegment:
@@ -41,7 +41,7 @@ def registered_tools(mock_client):
     from mcp.server.fastmcp import FastMCP
     mcp = FastMCP("TestTranscription")
     with patch("server.main.client", mock_client):
-        from server.tools.transcription_tools import register
+        from audacity_mcp.tools.transcription_tools import register
         register(mcp)
     return mcp._tool_manager._tools
 
@@ -135,18 +135,18 @@ class TestTranscribeToFile:
 
 class TestFormatters:
     def test_srt_timestamps(self):
-        from server.tools.transcription_tools import _format_timestamp_srt
+        from audacity_mcp.tools.transcription_tools import _format_timestamp_srt
         assert _format_timestamp_srt(0.0) == "00:00:00,000"
         assert _format_timestamp_srt(61.5) == "00:01:01,500"
         assert _format_timestamp_srt(3661.123) == "01:01:01,123"
 
     def test_vtt_timestamps(self):
-        from server.tools.transcription_tools import _format_timestamp_vtt
+        from audacity_mcp.tools.transcription_tools import _format_timestamp_vtt
         assert _format_timestamp_vtt(0.0) == "00:00:00.000"
         assert _format_timestamp_vtt(61.5) == "00:01:01.500"
 
     def test_segments_to_srt(self):
-        from server.tools.transcription_tools import _segments_to_srt
+        from audacity_mcp.tools.transcription_tools import _segments_to_srt
         segments = [{"start": 0.0, "end": 2.5, "text": "Hello"}, {"start": 2.5, "end": 5.0, "text": "World"}]
         srt = _segments_to_srt(segments)
         assert "1\n" in srt
@@ -154,14 +154,14 @@ class TestFormatters:
         assert "00:00:00,000 --> 00:00:02,500" in srt
 
     def test_segments_to_vtt(self):
-        from server.tools.transcription_tools import _segments_to_vtt
+        from audacity_mcp.tools.transcription_tools import _segments_to_vtt
         segments = [{"start": 0.0, "end": 2.5, "text": "Hello"}]
         vtt = _segments_to_vtt(segments)
         assert vtt.startswith("WEBVTT")
         assert "00:00:00.000 --> 00:00:02.500" in vtt
 
     def test_segments_to_txt(self):
-        from server.tools.transcription_tools import _segments_to_txt
+        from audacity_mcp.tools.transcription_tools import _segments_to_txt
         segments = [{"start": 0.0, "end": 2.5, "text": "Hello"}, {"start": 2.5, "end": 5.0, "text": "World"}]
         txt = _segments_to_txt(segments)
         assert txt == "Hello\nWorld"

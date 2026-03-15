@@ -377,10 +377,10 @@ The installer enables this automatically, but if it didn't work (e.g. Audacity w
 │(AI assistant)│    (JSON-RPC)  │   FastMCP    │  (commands)    │              │
 └──────────────┘                └──────────────┘                └──────────────┘
                                        │
-                                       ├── server/main.py          (entry point)
-                                       ├── server/audacity_client.py (pipe I/O)
-                                       ├── server/tool_registry.py  (auto-loader)
-                                       └── server/tools/            (11 modules)
+                                       ├── audacity_mcp/main.py          (entry point)
+                                       ├── audacity_mcp/audacity_client.py (pipe I/O)
+                                       ├── audacity_mcp/tool_registry.py  (auto-loader)
+                                       └── audacity_mcp/tools/            (11 modules)
 ```
 
 ### Key Design Decisions
@@ -390,13 +390,13 @@ The installer enables this automatically, but if it didn't work (e.g. Audacity w
 - **Cross-platform** — Windows uses Win32 API via ctypes, Unix uses standard file I/O.
 - **Async throughout** — All tool handlers are `async`. Blocking pipe I/O runs in an executor pool with configurable timeouts.
 - **Safe pipelines** — Pipelines measure audio before making loudness decisions. They only reduce, never boost.
-- **Dynamic tool registration** — Drop a module in `server/tools/`, export a `register(mcp)` function, and it's automatically discovered.
+- **Dynamic tool registration** — Drop a module in `audacity_mcp/tools/`, export a `register(mcp)` function, and it's automatically discovered.
 
 ### Project Structure
 
 ```
 AudacityMCP/
-├── server/
+├── audacity_mcp/
 │   ├── main.py                 # FastMCP server entry point
 │   ├── audacity_client.py      # Cross-platform named pipe client
 │   ├── tool_registry.py        # Auto-discovers and registers tool modules
@@ -412,7 +412,7 @@ AudacityMCP/
 │       ├── track_tools.py      # Track management
 │       ├── transcription_tools.py  # Whisper-based transcription
 │       └── transport_tools.py  # Playback and recording control
-├── shared/
+├── audacity_mcp_shared/
 │   ├── constants.py            # Pipe paths, timeouts, allowed formats
 │   ├── error_codes.py          # Typed error codes (pipe/command/validation)
 │   └── pipe_protocol.py        # Command formatting and response parsing
@@ -437,19 +437,19 @@ pytest tests/ -x -q
 
 ### Adding New Tools
 
-1. Create a module in `server/tools/` (or add to an existing one)
+1. Create a module in `audacity_mcp/tools/` (or add to an existing one)
 2. Export a `register(mcp: FastMCP)` function
 3. Define your tools with `@mcp.tool()` decorators
 4. That's it — the tool registry auto-discovers it on startup
 
 ```python
-# server/tools/my_tools.py
+# audacity_mcp/tools/my_tools.py
 from mcp.server.fastmcp import FastMCP
-from shared.error_codes import AudacityMCPError, ErrorCode
+from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
 
 
 def register(mcp: FastMCP):
-    from server.main import client
+    from audacity_mcp.main import client
 
     @mcp.tool()
     async def my_custom_effect(intensity: float = 0.5) -> dict:

@@ -2,9 +2,9 @@ import asyncio
 import sys
 from pathlib import Path
 
-from shared.constants import PipePaths, Timeouts
-from shared.error_codes import AudacityMCPError, ErrorCode
-from shared.pipe_protocol import format_command, parse_response
+from audacity_mcp_shared.constants import PipePaths, Timeouts
+from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
+from audacity_mcp_shared.pipe_protocol import format_command, parse_response
 
 if sys.platform == "win32":
     import ctypes
