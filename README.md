@@ -47,24 +47,14 @@ AudacityMCP works with any AI client that supports the [Model Context Protocol](
 git clone https://github.com/xDarkzx/Audacity-MCP.git
 ```
 
-### 2. Enable mod-script-pipe in Audacity (important!)
-
-> **You must do this before AudacityMCP can talk to Audacity.** The installer will try to enable it automatically, but if Audacity has never been opened before it won't have a config file yet.
-
-Open Audacity → **Edit** → **Preferences** → **Modules** → set `mod-script-pipe` to **Enabled** → restart Audacity.
-
-<p align="center">
-  <img src="docs/images/mod-script-pipe-enable.png" alt="Enable mod-script-pipe in Audacity Preferences → Modules" width="600" />
-</p>
-
-### 3. Run the installer (sets up everything else automatically)
+### 2. Run the installer (sets up everything else automatically)
 
 Open the folder and run:
 
 - **Windows:** Double-click `install.bat`
 - **macOS / Linux:** Open terminal in the folder and run `bash install.sh`
 
-> The installer does 3 things: installs `audacity-mcp` from PyPI, enables mod-script-pipe (if Audacity config exists), and **configures Claude Desktop** — no manual JSON editing needed.
+> The installer does 3 things: installs `audacity-mcp` from PyPI, enables mod-script-pipe in Audacity, and **configures Claude Desktop** — no manual JSON editing needed.
 
 <details>
 <summary>Other MCP clients (Cursor, Claude Code, etc.)</summary>
@@ -85,7 +75,7 @@ Check your client's MCP documentation for the config file location.
 
 </details>
 
-### 4. Start editing
+### 3. Start editing
 
 Open Audacity, load some audio, then talk to your AI:
 
@@ -323,11 +313,25 @@ Powered by [faster-whisper](https://github.com/SYSTRAN/faster-whisper) — runs 
 
 ## Troubleshooting
 
+### mod-script-pipe Not Enabled
+
+The installer enables this automatically, but if it didn't work (e.g. Audacity was never opened before), enable it manually:
+
+1. Open **Audacity**
+2. Go to **Edit → Preferences** (Windows/Linux) or **Audacity → Preferences** (macOS)
+3. Click **Modules** in the left sidebar
+4. Set `mod-script-pipe` to **Enabled**
+5. Click **OK** and **restart Audacity**
+
+<p align="center">
+  <img src="docs/images/mod-script-pipe-enable.png" alt="Enable mod-script-pipe in Audacity Preferences → Modules" width="600" />
+</p>
+
 ### Connection Issues
 
 | Problem | Fix |
 |---------|-----|
-| "Pipe not found" | Open Audacity first. Make sure `mod-script-pipe` is enabled in Edit → Preferences → Modules. Restart Audacity after enabling. |
+| "Pipe not found" | Open Audacity first. Make sure `mod-script-pipe` is enabled (see above). Restart Audacity after enabling. |
 | "Pipe timeout" | Audacity is busy. Wait for it to finish — some effects take minutes on long files. |
 | Connection works once then fails | The pipe disconnected (Audacity crash or restart). Just try again — AudacityMCP auto-reconnects. |
 | "Access denied" (Windows) | Audacity and your AI client must run as the same user. Don't mix admin and non-admin. |
