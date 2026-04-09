@@ -30,6 +30,9 @@ def _cleanup_stale_jobs():
             job["status"] = "error"
             job["error"] = "Timed out after 10 minutes — killed automatically"
             job["current_step"] = "timed out"
+            task = job.get("_task")
+            if task and not task.done():
+                task.cancel()
 
     completed = [(k, v) for k, v in _jobs.items() if v["status"] in ("complete", "error")]
     if len(completed) > _MAX_COMPLETED_JOBS:
@@ -57,12 +60,19 @@ def register(mcp: FastMCP):
     def _has_running_pipeline() -> bool:
         return any(j["status"] == "running" for j in _jobs.values())
 
+    def _has_running_transcription() -> bool:
+        try:
+            from audacity_mcp.tools.transcription_tools import _jobs as transcription_jobs
+            return any(j["status"] == "running" for j in transcription_jobs.values())
+        except ImportError:
+            return False
+
     async def _create_job(pipeline_name: str) -> tuple[str, dict]:
         """Create a job dict and return (job_id, job). Also checks for concurrent runs.
         Uses a lock to prevent race conditions from near-simultaneous calls."""
         async with _job_lock:
             _cleanup_stale_jobs()
-            if _has_running_pipeline():
+            if _has_running_pipeline() or _has_running_transcription():
                 return None, None
             job_id = str(uuid.uuid4())[:8]
             job = {
@@ -229,7 +239,7 @@ def register(mcp: FastMCP):
 
     def _start_background(job_id: str, job: dict, coro, label: str) -> dict:
         """Launch a pipeline coroutine as a background task and return the standard response."""
-        asyncio.create_task(coro)
+        job["_task"] = asyncio.create_task(coro)
         return {
             "job_id": job_id,
             "status": "running",
@@ -499,6 +509,7 @@ def register(mcp: FastMCP):
         Args:
             job_id: The job ID returned by any auto_ pipeline tool
         """
+        _cleanup_stale_jobs()
         job = _jobs.get(job_id)
         if not job:
             raise AudacityMCPError(ErrorCode.INVALID_PARAMETER, f"Unknown job_id: {job_id}")

@@ -110,6 +110,13 @@ def _get_model(model_size: str):
         # Re-check after acquiring lock (another thread may have loaded it)
         if _model_instance is not None and _model_size_loaded == model_size:
             return _model_instance
+        # Free previous model to release GPU/CPU memory before loading new one
+        if _model_instance is not None:
+            del _model_instance
+            _model_instance = None
+            _model_size_loaded = None
+            import gc
+            gc.collect()
         _setup_cuda_path()
         from faster_whisper import WhisperModel
         cache_dir = _get_cache_dir()
@@ -203,6 +210,7 @@ def register(mcp: FastMCP):
         Args:
             job_id: The job ID returned when you started the transcription.
         """
+        _cleanup_stale_jobs()
         job = _jobs.get(job_id)
         if not job:
             return {"error": f"No transcription job found with id '{job_id}'"}
@@ -249,8 +257,7 @@ def register(mcp: FastMCP):
 
             # Step 1: Export audio
             job["current_step"] = "exporting audio from Audacity"
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                temp_path = f.name
+            temp_path = os.path.join(tempfile.gettempdir(), f"audacity_mcp_transcribe_{uuid.uuid4().hex[:8]}.wav")
 
             if select_all:
                 await client.execute("SelAllTracks")
@@ -336,6 +343,13 @@ def register(mcp: FastMCP):
     def _has_running_transcription() -> bool:
         return any(j["status"] == "running" for j in _jobs.values())
 
+    def _has_running_pipeline() -> bool:
+        try:
+            from audacity_mcp.tools.cleanup_tools import _jobs as pipeline_jobs
+            return any(j["status"] == "running" for j in pipeline_jobs.values())
+        except ImportError:
+            return False
+
     def _cleanup_stale_jobs():
         """Kill jobs running longer than timeout, evict oldest completed jobs."""
         now = time.time()
@@ -344,6 +358,9 @@ def register(mcp: FastMCP):
                 job["status"] = "error"
                 job["error"] = "Timed out after 10 minutes — killed automatically"
                 job["current_step"] = "timed out"
+                task = job.get("_task")
+                if task and not task.done():
+                    task.cancel()
 
         completed = [(k, v) for k, v in _jobs.items() if v["status"] in ("complete", "error")]
         if len(completed) > _MAX_COMPLETED_JOBS:
@@ -357,6 +374,13 @@ def register(mcp: FastMCP):
         _log.info("_start_transcription called")
         async with _job_lock:
             _cleanup_stale_jobs()
+
+            if _has_running_pipeline():
+                _log.info("Blocked: a cleanup pipeline is running")
+                return {
+                    "error": "A cleanup pipeline is currently running. Wait for it to finish before transcribing.",
+                    "message": "Use check_pipeline_status to monitor the existing pipeline.",
+                }
 
             if _has_running_transcription():
                 running = next(j for j in _jobs.values() if j["status"] == "running")
@@ -382,7 +406,7 @@ def register(mcp: FastMCP):
 
         coro = _transcribe_background(job, model_size, language, task,
                                        select_all, add_labels, export_path, export_format)
-        asyncio.create_task(coro)
+        job["_task"] = asyncio.create_task(coro)
         _log.info(f"Background task created, returning job_id={job_id}")
         return {
             "job_id": job_id,
@@ -521,16 +545,18 @@ def register(mcp: FastMCP):
             model_size: Model to load - "tiny", "base", "small", "medium", "large-v3"
         """
         _validate_model_size(model_size)
-        job_id = str(uuid.uuid4())[:8]
-        job = {
-            "status": "running",
-            "current_step": f"downloading and loading {model_size} model (~{_model_download_size(model_size)})",
-            "steps_completed": [],
-            "started_at": time.time(),
-            "result": None,
-            "error": None,
-        }
-        _jobs[job_id] = job
+        async with _job_lock:
+            _cleanup_stale_jobs()
+            job_id = str(uuid.uuid4())[:8]
+            job = {
+                "status": "running",
+                "current_step": f"downloading and loading {model_size} model (~{_model_download_size(model_size)})",
+                "steps_completed": [],
+                "started_at": time.time(),
+                "result": None,
+                "error": None,
+            }
+            _jobs[job_id] = job
 
         async def _load():
             await asyncio.sleep(0.5)  # yield so FastMCP can send response first
@@ -549,7 +575,7 @@ def register(mcp: FastMCP):
                 job["status"] = "error"
                 job["error"] = f"{type(e).__name__}: {e}"
 
-        asyncio.create_task(_load())
+        job["_task"] = asyncio.create_task(_load())
         return {
             "job_id": job_id,
             "status": "running",

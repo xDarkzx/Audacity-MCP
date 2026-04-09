@@ -15,8 +15,8 @@ def _validate_value(value: str) -> str:
 
 
 def _quote_value(value: str) -> str:
-    if " " in value or '"' in value or "=" in value:
-        escaped = value.replace('"', '\\"')
+    if " " in value or '"' in value or "=" in value or "\\" in value:
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
     return value
 

@@ -76,8 +76,10 @@ class AudacityClient:
                 self._to_pipe = open(PipePaths.TO_SRV, "w")
                 self._from_pipe = open(PipePaths.FROM_SRV, "r")
         except AudacityMCPError:
+            self._close_pipes()
             raise
         except OSError as e:
+            self._close_pipes()
             raise AudacityMCPError(ErrorCode.PIPE_OPEN_FAILED, str(e))
 
     def _win32_open_pipe(self, pipe_path: str, access: int) -> ctypes.wintypes.HANDLE:
@@ -185,6 +187,8 @@ class AudacityClient:
             raise AudacityMCPError(ErrorCode.PIPE_READ_FAILED, str(e))
 
     def _posix_send_raw(self, command_str: str) -> str:
+        import select
+
         try:
             self._to_pipe.write(command_str)
             self._to_pipe.flush()
@@ -195,6 +199,14 @@ class AudacityClient:
         try:
             response_lines = []
             while True:
+                # Wait up to PIPE_READ timeout for data to avoid hanging forever
+                ready, _, _ = select.select([self._from_pipe], [], [], Timeouts.PIPE_READ)
+                if not ready:
+                    self._close_pipes()
+                    raise AudacityMCPError(
+                        ErrorCode.PIPE_TIMEOUT,
+                        f"Pipe read timed out after {Timeouts.PIPE_READ}s — Audacity may have stopped responding",
+                    )
                 line = self._from_pipe.readline()
                 if not line:
                     break
@@ -202,6 +214,8 @@ class AudacityClient:
                 if line.strip() == "":
                     break
             return "".join(response_lines)
+        except AudacityMCPError:
+            raise
         except OSError as e:
             self._close_pipes()
             raise AudacityMCPError(ErrorCode.PIPE_READ_FAILED, str(e))

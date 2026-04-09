@@ -14,11 +14,15 @@ def _get_blocked_dirs():
         _BLOCKED_DIRS = set()
         if os.name == "nt":
             win_dir = os.environ.get("WINDIR", r"C:\Windows")
-            _BLOCKED_DIRS.add(os.path.realpath(win_dir).lower())
+            _BLOCKED_DIRS.add(os.path.normcase(os.path.realpath(win_dir)))
             prog = os.environ.get("PROGRAMFILES", r"C:\Program Files")
-            _BLOCKED_DIRS.add(os.path.realpath(prog).lower())
+            _BLOCKED_DIRS.add(os.path.normcase(os.path.realpath(prog)))
             prog86 = os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
-            _BLOCKED_DIRS.add(os.path.realpath(prog86).lower())
+            _BLOCKED_DIRS.add(os.path.normcase(os.path.realpath(prog86)))
+        else:
+            for d in ("/System", "/Library", "/usr", "/bin", "/sbin", "/etc", "/var"):
+                if os.path.isdir(d):
+                    _BLOCKED_DIRS.add(os.path.realpath(d))
     return _BLOCKED_DIRS
 
 
@@ -29,7 +33,8 @@ def _safe_path(path: str) -> str:
     resolved = os.path.realpath(path)
     # Block system directories
     for blocked in _get_blocked_dirs():
-        if resolved.lower().startswith(blocked + os.sep) or resolved.lower() == blocked:
+        check = os.path.normcase(resolved)
+        if check.startswith(blocked + os.sep) or check == blocked:
             raise AudacityMCPError(
                 ErrorCode.INVALID_PATH,
                 f"Cannot access system directory: {blocked}",
@@ -108,13 +113,13 @@ def register(mcp: FastMCP):
         MANDATORY: ALWAYS tell the user where the file will be saved BEFORE exporting.
         Example: "I'll save your audio to C:\\Users\\Name\\Music\\file.mp3"
 
-        NEVER save directly to the user's home folder (e.g. C:\\Users\\Name\\file.mp3).
+        NEVER save directly to the user's home folder (e.g. ~/file.mp3 or C:\\Users\\Name\\file.mp3).
         ALWAYS save to a subfolder. If the user doesn't specify a path, call get_default_export_folder
         to get their Music folder and save there. Acceptable locations:
-        - Music folder: C:\\Users\\Name\\Music\\file.mp3
-        - Documents folder: C:\\Users\\Name\\Documents\\file.mp3
-        - Desktop: C:\\Users\\Name\\Desktop\\file.mp3
-        NEVER save to C:\\Users\\Name\\file.mp3 — this clutters the user's home directory.
+        - Music folder: ~/Music/file.mp3
+        - Documents folder: ~/Documents/file.mp3
+        - Desktop: ~/Desktop/file.mp3
+        NEVER save to the home folder root — this clutters the user's home directory.
 
         Args:
             path: Absolute path for exported file. Extension determines format (wav, mp3, ogg, flac, aiff).
