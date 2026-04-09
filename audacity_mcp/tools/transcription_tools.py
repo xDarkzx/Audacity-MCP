@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import sys
 import tempfile
 import time
 import uuid
@@ -82,8 +83,19 @@ def _setup_cuda_path():
 def _cuda_is_available() -> bool:
     """Check if CUDA is actually usable — not just installed but functional."""
     try:
+        import torch
+        return torch.cuda.is_available()
+    except ImportError:
+        pass
+    # Fallback: try loading CUDA library directly
+    try:
         import ctypes
-        ctypes.cdll.LoadLibrary("cublas64_12.dll")
+        if sys.platform == "win32":
+            ctypes.cdll.LoadLibrary("cublas64_12.dll")
+        elif sys.platform == "darwin":
+            return False  # macOS has no CUDA support
+        else:
+            ctypes.cdll.LoadLibrary("libcublas.so")
         return True
     except OSError:
         return False
