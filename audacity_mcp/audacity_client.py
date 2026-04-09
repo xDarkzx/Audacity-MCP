@@ -78,7 +78,7 @@ class AudacityClient:
         except OSError as e:
             raise AudacityMCPError(ErrorCode.PIPE_OPEN_FAILED, str(e))
 
-    def _win32_open_pipe(self, pipe_path: str, access: int) -> ctypes.wintypes.HANDLE:
+    def _win32_open_pipe(self, pipe_path: str, access: int) -> "ctypes.wintypes.HANDLE":
         for _ in range(3):
             handle = kernel32.CreateFileW(
                 pipe_path,
