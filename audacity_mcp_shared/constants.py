@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -7,8 +8,9 @@ class PipePaths:
         TO_SRV = r"\\.\pipe\ToSrvPipe"
         FROM_SRV = r"\\.\pipe\FromSrvPipe"
     else:
-        TO_SRV = "/tmp/audacity_script_pipe.to.0"
-        FROM_SRV = "/tmp/audacity_script_pipe.from.0"
+        _uid = os.getuid()
+        TO_SRV = f"/tmp/audacity_script_pipe.to.{_uid}"
+        FROM_SRV = f"/tmp/audacity_script_pipe.from.{_uid}"
 
 
 class Timeouts:
