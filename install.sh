@@ -111,6 +111,7 @@ if ! $PYTHON -m pip --version &> /dev/null; then
     fi
 fi
 
+$PYTHON -m pip install --upgrade pip >/dev/null 2>&1
 if ! $PYTHON -m pip install audacity-mcp; then
     echo ""
     echo " ERROR: pip install failed."

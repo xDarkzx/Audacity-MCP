@@ -97,6 +97,7 @@ if %errorlevel% neq 0 (
         exit /b 1
     )
 )
+python -m pip install --upgrade pip >nul 2>&1
 python -m pip install audacity-mcp
 if %errorlevel% neq 0 (
     echo.
