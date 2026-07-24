@@ -2,6 +2,17 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [0.1.9] - 2026-07-25
+
+### Snap / Flatpak Audacity Support (Linux)
+
+Reported in [#7](https://github.com/xDarkzx/Audacity-MCP/issues/7): Snap-packaged Audacity on Ubuntu sandboxes `/tmp`, so the hardcoded pipe path never matched anything and the installer failed silently. Investigated the same class of issue across every OS/packaging combination we ship for (Windows installer/portable, macOS DMG/Homebrew/portable, Linux native/Snap/Flatpak/AppImage) and fixed the two real bugs found:
+
+- **Pipe path auto-detection**: `PipePaths.resolve()` now re-detects the pipe directory on every connection instead of hardcoding `/tmp` at import time. It checks an `AUDACITY_PIPE_DIR` override first, then the plain `/tmp` path, then falls back to walking `/proc/*/comm` for a process named `audacity` and using `/proc/<pid>/root/tmp` — but only if both FIFOs actually exist there for the current uid, so a confined Audacity with mod-script-pipe disabled doesn't get mistaken for a working pipe. This isn't Snap-specific — it also fixes Flatpak, which sandboxes `/tmp` the same way via bubblewrap.
+- **Installer config-path detection (`install.sh`)**: now falls back to Snap's (`~/snap/audacity/current/.config/audacity/audacity.cfg`) and Flatpak's (`~/.var/app/org.audacityteam.Audacity/config/audacity/audacity.cfg`) config locations when the standard `$XDG_CONFIG_HOME` path is missing, instead of stopping at step 3 with "config not found."
+- **Documented, not fixed**: Audacity's portable mode (a `Portable Settings` folder next to the executable, on any OS) relocates `audacity.cfg` outside every path above. No user has hit this yet, and auto-detecting it requires locating Audacity's install directory, which the installer doesn't do — added a troubleshooting note (README + `docs/INSTALLATION.md`) with the manual workaround instead of building speculative detection for an unreported case.
+- Added `tests/test_pipe_paths.py` covering the detection logic (override precedence, matching process found, FIFOs missing, non-`audacity` process skipped, non-Linux no-op).
+
 ## [0.1.7] - 2026-04-10
 
 ### macOS / Linux Compatibility

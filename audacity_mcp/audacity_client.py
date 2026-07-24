@@ -73,8 +73,9 @@ class AudacityClient:
                 self._from_pipe = self._win32_open_pipe(PipePaths.FROM_SRV, GENERIC_READ | GENERIC_WRITE)
                 self._to_pipe = self._win32_open_pipe(PipePaths.TO_SRV, GENERIC_READ | GENERIC_WRITE)
             else:
-                self._to_pipe = open(PipePaths.TO_SRV, "w")
-                self._from_pipe = open(PipePaths.FROM_SRV, "r")
+                to_path, from_path = PipePaths.resolve()
+                self._to_pipe = open(to_path, "w")
+                self._from_pipe = open(from_path, "r")
         except AudacityMCPError:
             self._close_pipes()
             raise

@@ -129,6 +129,13 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     AUD_CFG="$HOME/Library/Application Support/audacity/audacity.cfg"
 else
     AUD_CFG="${XDG_CONFIG_HOME:-$HOME/.config}/audacity/audacity.cfg"
+    SNAP_CFG="$HOME/snap/audacity/current/.config/audacity/audacity.cfg"
+    FLATPAK_CFG="$HOME/.var/app/org.audacityteam.Audacity/config/audacity/audacity.cfg"
+    if [ ! -f "$AUD_CFG" ] && [ -f "$SNAP_CFG" ]; then
+        AUD_CFG="$SNAP_CFG"
+    elif [ ! -f "$AUD_CFG" ] && [ -f "$FLATPAK_CFG" ]; then
+        AUD_CFG="$FLATPAK_CFG"
+    fi
 fi
 
 if [ ! -f "$AUD_CFG" ]; then

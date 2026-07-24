@@ -366,6 +366,8 @@ The installer enables this automatically, but if it didn't work (e.g. Audacity w
 | "No module named faster_whisper" | Run `pip install faster-whisper`. Transcription is optional — everything else works without it. |
 | Model download fails | Check internet and retry. Models cache locally after first download. |
 | Pipes missing in /tmp (macOS/Linux) | Check Audacity is running and mod-script-pipe is enabled. Check Audacity's console for errors. |
+| Using Snap or Flatpak Audacity on Linux | Both sandbox `/tmp`, so AudacityMCP auto-detects the real pipe location inside Audacity's mount namespace — no setup needed. If auto-detection fails (containers, restrictive ptrace policies, unusual sandboxing), set the `AUDACITY_PIPE_DIR` environment variable to the directory holding the pipes and it'll be used directly. |
+| Installer says "Audacity config not found" but Audacity definitely runs | If you're running a **portable** Audacity (a `Portable Settings` folder next to the executable), it keeps `audacity.cfg` there instead of the normal per-OS location, so the installer can't find it. Enable `mod-script-pipe` manually instead (Preferences → Modules). |
 
 ---
 

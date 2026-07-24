@@ -287,3 +287,4 @@ That's it — AudacityMCP automatically detects GPU and uses it. No CUDA toolkit
 | "No module named faster_whisper" | Not installed | `pip install faster-whisper` |
 | Model download fails | Network issue | Check internet and retry — models cache after first download |
 | Config not working | Wrong path or JSON syntax | Copy the complete example above, replace paths, validate JSON at jsonlint.com |
+| Installer says config not found, but Audacity runs fine | You're running a **portable** Audacity (a `Portable Settings` folder next to the executable) | It stores `audacity.cfg` there instead of the normal location — enable `mod-script-pipe` manually (Preferences → Modules) |
