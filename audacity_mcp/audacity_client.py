@@ -73,15 +73,59 @@ class AudacityClient:
                 self._from_pipe = self._win32_open_pipe(PipePaths.FROM_SRV, GENERIC_READ | GENERIC_WRITE)
                 self._to_pipe = self._win32_open_pipe(PipePaths.TO_SRV, GENERIC_READ | GENERIC_WRITE)
             else:
-                to_path, from_path = PipePaths.resolve()
-                self._to_pipe = open(to_path, "w")
-                self._from_pipe = open(from_path, "r")
+                self._posix_open_pipes()
         except AudacityMCPError:
             self._close_pipes()
             raise
+        except FileNotFoundError:
+            self._close_pipes()
+            raise AudacityMCPError(
+                ErrorCode.PIPE_NOT_FOUND,
+                "Audacity pipe not found. Is Audacity running with mod-script-pipe enabled? "
+                "(Edit > Preferences > Modules > mod-script-pipe = Enabled, then restart Audacity)",
+            )
         except OSError as e:
             self._close_pipes()
             raise AudacityMCPError(ErrorCode.PIPE_OPEN_FAILED, str(e))
+
+    def _posix_open_pipes(self):
+        # Audacity's mod-script-pipe relay opens its WRITE end (FROM) first and
+        # blocks for a reader, so the client must open FROM before TO. The reverse
+        # order (the historical bug) races the relay and yields immediate empty
+        # reads. Open FROM read-only + O_NONBLOCK so it never hangs and reads are
+        # driven by select()/os.read in _posix_send_raw. Open TO with O_NONBLOCK
+        # too (it raises ENXIO until the relay's read end is up — poll briefly),
+        # then clear O_NONBLOCK so os.write to it behaves normally. We deliberately
+        # keep RAW integer fds here (no buffered file object): the relay closes
+        # both ends right after each reply, and a buffered reader's readahead/EOF
+        # handling drops the reply, whereas os.read() returns the bytes reliably.
+        import errno
+        import fcntl
+        import os
+        import time
+
+        to_path, from_path = PipePaths.resolve()
+        from_fd = os.open(from_path, os.O_RDONLY | os.O_NONBLOCK)
+        try:
+            deadline = time.monotonic() + Timeouts.PIPE_OPEN
+            while True:
+                try:
+                    to_fd = os.open(to_path, os.O_WRONLY | os.O_NONBLOCK)
+                    break
+                except OSError as e:
+                    if e.errno == errno.ENXIO and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                        continue
+                    raise
+        except BaseException:
+            os.close(from_fd)
+            raise
+
+        flags = fcntl.fcntl(to_fd, fcntl.F_GETFL)
+        fcntl.fcntl(to_fd, fcntl.F_SETFL, flags & ~os.O_NONBLOCK)
+
+        self._from_pipe = from_fd  # raw int fd (read, non-blocking)
+        self._to_pipe = to_fd      # raw int fd (write, blocking)
 
     def _win32_open_pipe(self, pipe_path: str, access: int) -> ctypes.wintypes.HANDLE:
         for _ in range(3):
@@ -125,23 +169,56 @@ class AudacityClient:
                     except OSError:
                         pass
         else:
-            for pipe in (self._to_pipe, self._from_pipe):
-                if pipe:
+            import os
+
+            for fd in (self._to_pipe, self._from_pipe):
+                if fd is not None:
                     try:
-                        pipe.close()
+                        os.close(fd)
                     except OSError:
                         pass
         self._to_pipe = None
         self._from_pipe = None
 
-    def _send_raw(self, command_str: str) -> str:
-        if self._to_pipe is None or self._from_pipe is None:
-            self._open_pipes()
+    # Audacity's mod-script-pipe relay (Linux) tears down and reopens BOTH FIFO
+    # ends after every command cycle. Even a fresh per-command open races that
+    # reopen, so any single attempt succeeds only ~50% of the time (empty read /
+    # broken pipe), with successes and failures alternating cycle-to-cycle. A
+    # bounded retry — closing our ends between attempts so the relay finishes its
+    # cycle and we reopen clean — makes it reliable. A bad cycle fails fast
+    # (immediate empty read), so the retries are cheap in the common case.
+    _POSIX_SEND_ATTEMPTS = 6
 
+    def _send_raw(self, command_str: str) -> str:
         if sys.platform == "win32":
+            if self._to_pipe is None or self._from_pipe is None:
+                self._open_pipes()
             return self._win32_send_raw(command_str)
-        else:
-            return self._posix_send_raw(command_str)
+
+        import time
+
+        last_raw = ""
+        last_err = None
+        for attempt in range(self._POSIX_SEND_ATTEMPTS):
+            try:
+                self._open_pipes()  # always fresh; never cache a fd across commands
+                raw = self._posix_send_raw(command_str)
+                if "BatchCommand finished" in raw:
+                    return raw  # complete, well-formed response
+                if raw.strip():
+                    last_raw = raw  # non-empty but no terminator: keep as fallback
+            except AudacityMCPError as e:
+                last_err = e
+            finally:
+                self._close_pipes()  # tear our ends down so the relay re-cycles
+            time.sleep(0.05 * (attempt + 1))
+
+        if last_raw:
+            return last_raw
+        raise last_err or AudacityMCPError(
+            ErrorCode.PIPE_READ_FAILED,
+            f"Empty response from Audacity pipe after {self._POSIX_SEND_ATTEMPTS} attempts",
+        )
 
     def _win32_send_raw(self, command_str: str) -> str:
         data = command_str.encode("utf-8")
@@ -188,37 +265,38 @@ class AudacityClient:
             raise AudacityMCPError(ErrorCode.PIPE_READ_FAILED, str(e))
 
     def _posix_send_raw(self, command_str: str) -> str:
+        # Operates on the raw int fds from _posix_open_pipes. Closing is left to
+        # the caller (_send_raw's retry loop), which tears the pipes down between
+        # attempts so the relay can complete its cycle.
+        import os
         import select
 
         try:
-            self._to_pipe.write(command_str)
-            self._to_pipe.flush()
+            os.write(self._to_pipe, command_str.encode("utf-8"))
         except OSError as e:
-            self._close_pipes()
             raise AudacityMCPError(ErrorCode.PIPE_WRITE_FAILED, str(e))
 
         try:
-            response_lines = []
+            chunks = []
             while True:
-                # Wait up to PIPE_READ timeout for data to avoid hanging forever
+                # Gate each read so a silent relay can't hang us forever.
                 ready, _, _ = select.select([self._from_pipe], [], [], Timeouts.PIPE_READ)
                 if not ready:
-                    self._close_pipes()
                     raise AudacityMCPError(
                         ErrorCode.PIPE_TIMEOUT,
                         f"Pipe read timed out after {Timeouts.PIPE_READ}s — Audacity may have stopped responding",
                     )
-                line = self._from_pipe.readline()
-                if not line:
+                chunk = os.read(self._from_pipe, 65536)
+                if not chunk:  # EOF: relay closed its write end
                     break
-                response_lines.append(line)
-                if line.strip() == "":
+                chunks.append(chunk)
+                # Audacity terminates every reply with this status line.
+                if b"BatchCommand finished" in b"".join(chunks):
                     break
-            return "".join(response_lines)
+            return b"".join(chunks).decode("utf-8", errors="replace")
         except AudacityMCPError:
             raise
         except OSError as e:
-            self._close_pipes()
             raise AudacityMCPError(ErrorCode.PIPE_READ_FAILED, str(e))
 
     async def execute(self, command: str, extra_params: dict | None = None, **params) -> dict:

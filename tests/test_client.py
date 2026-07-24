@@ -19,28 +19,28 @@ if IS_WIN:
 class TestClientPipes:
     def test_pipe_not_found(self, client):
         if IS_WIN:
-            with patch("server.audacity_client.kernel32") as mock_k32:
+            with patch("audacity_mcp.audacity_client.kernel32") as mock_k32:
                 mock_k32.CreateFileW.return_value = INVALID_HANDLE_VALUE
                 with patch("ctypes.get_last_error", return_value=2):  # ERROR_FILE_NOT_FOUND
                     with pytest.raises(AudacityMCPError) as exc_info:
                         client._open_pipes()
                     assert exc_info.value.code == ErrorCode.PIPE_NOT_FOUND
         else:
-            with patch("builtins.open", side_effect=FileNotFoundError("not found")):
+            with patch("os.open", side_effect=FileNotFoundError("not found")):
                 with pytest.raises(AudacityMCPError) as exc_info:
                     client._open_pipes()
                 assert exc_info.value.code == ErrorCode.PIPE_NOT_FOUND
 
     def test_pipe_open_os_error(self, client):
         if IS_WIN:
-            with patch("server.audacity_client.kernel32") as mock_k32:
+            with patch("audacity_mcp.audacity_client.kernel32") as mock_k32:
                 mock_k32.CreateFileW.return_value = INVALID_HANDLE_VALUE
                 with patch("ctypes.get_last_error", return_value=5):  # ERROR_ACCESS_DENIED
                     with pytest.raises(AudacityMCPError) as exc_info:
                         client._open_pipes()
                     assert exc_info.value.code == ErrorCode.PIPE_OPEN_FAILED
         else:
-            with patch("builtins.open", side_effect=OSError("permission denied")):
+            with patch("os.open", side_effect=OSError("permission denied")):
                 with pytest.raises(AudacityMCPError) as exc_info:
                     client._open_pipes()
                 assert exc_info.value.code == ErrorCode.PIPE_OPEN_FAILED
@@ -49,7 +49,7 @@ class TestClientPipes:
         if IS_WIN:
             client._to_pipe = 123  # fake handle
             client._from_pipe = 456
-            with patch("server.audacity_client.kernel32") as mock_k32:
+            with patch("audacity_mcp.audacity_client.kernel32") as mock_k32:
                 mock_k32.WriteFile.return_value = False
                 mock_k32.CloseHandle.return_value = True
                 with patch("ctypes.get_last_error", return_value=232):
@@ -58,15 +58,15 @@ class TestClientPipes:
                     assert exc_info.value.code == ErrorCode.PIPE_WRITE_FAILED
             assert client._to_pipe is None
         else:
-            mock_to = MagicMock()
-            mock_to.write.side_effect = OSError("broken pipe")
-            mock_from = MagicMock()
-            client._to_pipe = mock_to
-            client._from_pipe = mock_from
-            with pytest.raises(AudacityMCPError) as exc_info:
-                client._send_raw("Play:\n")
-            assert exc_info.value.code == ErrorCode.PIPE_WRITE_FAILED
-            assert client._to_pipe is None
+            # _posix_send_raw operates on raw fds (os.write/os.read), and closing
+            # is left to the _send_raw retry loop's caller, not _posix_send_raw
+            # itself - so test the write failure at that layer directly.
+            client._to_pipe = 99  # fake fd
+            client._from_pipe = 100
+            with patch("os.write", side_effect=OSError("broken pipe")):
+                with pytest.raises(AudacityMCPError) as exc_info:
+                    client._posix_send_raw("Play:\n")
+                assert exc_info.value.code == ErrorCode.PIPE_WRITE_FAILED
 
 
 @pytest.mark.asyncio
