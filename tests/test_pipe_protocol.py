@@ -87,7 +87,9 @@ class TestFormatCommandEdgeCases:
 
     def test_windows_path_with_backslashes(self):
         result = format_command("Import2", Filename=r"C:\Users\Test\Music\file.wav")
-        assert r"C:\Users\Test\Music\file.wav" in result
+        # Backslashes are doubled and the value quoted (see _quote_value) so the
+        # pipe protocol's own backslash-escaping can't be misread downstream.
+        assert r'Filename="C:\\Users\\Test\\Music\\file.wav"' in result
 
     def test_empty_string_param(self):
         result = format_command("SetLabel", Text="")
