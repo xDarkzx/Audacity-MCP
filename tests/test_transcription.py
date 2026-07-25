@@ -51,21 +51,21 @@ class TestValidation:
         tool = registered_tools["transcribe_audio"]
         with pytest.raises(AudacityMCPError) as exc:
             import asyncio
-            asyncio.get_event_loop().run_until_complete(tool.fn(model_size="huge"))
+            asyncio.run(tool.fn(model_size="huge"))
         assert exc.value.code == ErrorCode.INVALID_PARAMETER
 
     def test_invalid_task(self, registered_tools):
         tool = registered_tools["transcribe_audio"]
         with pytest.raises(AudacityMCPError) as exc:
             import asyncio
-            asyncio.get_event_loop().run_until_complete(tool.fn(task="summarize"))
+            asyncio.run(tool.fn(task="summarize"))
         assert exc.value.code == ErrorCode.INVALID_PARAMETER
 
     def test_invalid_format(self, registered_tools):
         tool = registered_tools["transcribe_to_file"]
         with pytest.raises(AudacityMCPError) as exc:
             import asyncio
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 tool.fn(path="/tmp/out.txt", format="docx")
             )
         assert exc.value.code == ErrorCode.INVALID_FORMAT
@@ -74,7 +74,7 @@ class TestValidation:
         tool = registered_tools["transcribe_to_file"]
         with pytest.raises(AudacityMCPError) as exc:
             import asyncio
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 tool.fn(path="relative/path.srt", format="srt")
             )
         assert exc.value.code == ErrorCode.INVALID_PATH
@@ -83,7 +83,7 @@ class TestValidation:
         tool = registered_tools["transcription_set_model"]
         with pytest.raises(AudacityMCPError) as exc:
             import asyncio
-            asyncio.get_event_loop().run_until_complete(tool.fn(model_size="xxx"))
+            asyncio.run(tool.fn(model_size="xxx"))
         assert exc.value.code == ErrorCode.INVALID_PARAMETER
 
 
