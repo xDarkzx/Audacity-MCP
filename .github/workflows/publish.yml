@@ -6,14 +6,32 @@ name: Publish to PyPI
 # Publisher (OIDC) mechanism instead: PyPI is configured (once, on pypi.org)
 # to trust this exact workflow in this exact repo, so GitHub can prove its
 # identity to PyPI without a shared secret to store, rotate, or leak.
-on:
+"on":
   push:
     tags:
       - "v*"
   workflow_dispatch:
 
 jobs:
+  test:
+    # Gate: publishing requires the tagged commit itself to pass tests, not
+    # just whatever main's CI run said earlier — a tag can point anywhere.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev]"
+      - run: pytest tests/ -x -q
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
