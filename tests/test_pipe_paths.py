@@ -27,12 +27,15 @@ class TestResolveOverride:
 
 
 class TestDetectSnapPipeDir:
-    def test_finds_matching_audacity_process(self, monkeypatch, tmp_path):
+    def test_finds_matching_audacity_process(self, monkeypatch):
+        # _detect_snap_pipe_dir always constructs its candidate path as the
+        # literal "/proc/{pid}/root/tmp" (that's the real path it needs to
+        # check on an actual Linux box) — it never knows about pytest's
+        # tmp_path fixture, so the fake here must match that literal string,
+        # not a tmp_path-prefixed one. _is_fifo itself is fully mocked below,
+        # so no real files need to exist on disk for this test.
         uid = 1000
-        fake_root = tmp_path / "proc" / "555" / "root" / "tmp"
-        fake_root.mkdir(parents=True)
-        (fake_root / f"audacity_script_pipe.to.{uid}").touch()
-        (fake_root / f"audacity_script_pipe.from.{uid}").touch()
+        expected_dir = "/proc/555/root/tmp"
 
         real_listdir = __import__("os").listdir
         real_open = open
@@ -52,8 +55,8 @@ class TestDetectSnapPipeDir:
             return real_open(path, *a, **kw)
 
         def fake_is_fifo(path):
-            expected_to = str(tmp_path / "proc" / "555" / "root" / "tmp" / f"audacity_script_pipe.to.{uid}")
-            expected_from = str(tmp_path / "proc" / "555" / "root" / "tmp" / f"audacity_script_pipe.from.{uid}")
+            expected_to = f"{expected_dir}/audacity_script_pipe.to.{uid}"
+            expected_from = f"{expected_dir}/audacity_script_pipe.from.{uid}"
             return path in (expected_to, expected_from)
 
         monkeypatch.setattr("sys.platform", "linux")
@@ -62,7 +65,7 @@ class TestDetectSnapPipeDir:
         monkeypatch.setattr("audacity_mcp_shared.constants._is_fifo", fake_is_fifo)
 
         result = _detect_snap_pipe_dir(uid)
-        assert result == str(tmp_path / "proc" / "555" / "root" / "tmp")
+        assert result == expected_dir
 
     def test_returns_none_when_pipes_missing_for_matching_process(self, monkeypatch):
         monkeypatch.setattr("sys.platform", "linux")

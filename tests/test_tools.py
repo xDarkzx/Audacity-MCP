@@ -11,7 +11,7 @@ class TestToolRegistration:
         mock_client.execute = AsyncMock(return_value={"success": True, "raw": "", "message": "", "data": {}})
         mock_client.execute_long = AsyncMock(return_value={"success": True, "raw": "", "message": "", "data": {}})
 
-        with patch("server.main.client", mock_client):
+        with patch("audacity_mcp.main.client", mock_client):
             from audacity_mcp.tool_registry import register_all_tools
             register_all_tools(mcp)
 
