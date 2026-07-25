@@ -40,7 +40,7 @@ def mock_client():
 def registered_tools(mock_client):
     from mcp.server.fastmcp import FastMCP
     mcp = FastMCP("TestTranscription")
-    with patch("server.main.client", mock_client):
+    with patch("audacity_mcp.main.client", mock_client):
         from audacity_mcp.tools.transcription_tools import register
         register(mcp)
     return mcp._tool_manager._tools
