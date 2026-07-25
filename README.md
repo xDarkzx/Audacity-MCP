@@ -52,10 +52,17 @@ git clone https://github.com/xDarkzx/Audacity-MCP.git
 
 ### 2. Run the installer (sets up everything else automatically)
 
-Open the folder and run:
+**Windows:** either double-click `install.bat` in File Explorer, or — if you're already in a terminal from the `git clone` step above — just keep going in the same PowerShell/Command Prompt window:
+```powershell
+cd Audacity-MCP
+.\install.bat
+```
 
-- **Windows:** Double-click `install.bat`
-- **macOS / Linux:** Open terminal in the folder and run `bash install.sh`
+**macOS / Linux:**
+```bash
+cd Audacity-MCP
+bash install.sh
+```
 
 > The installer does 3 things: installs `audacity-mcp` from PyPI, enables mod-script-pipe in Audacity, and **configures Claude Desktop** — no manual JSON editing needed.
 
