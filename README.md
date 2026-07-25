@@ -473,6 +473,18 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for full guidelines.
 
 ---
 
+## Community
+
+Turning this into a tool every Audacity user reaches for takes more than one person. If you're using AudacityMCP — even just trying it out — come join the Discord: share what you built, report what's broken, suggest what's missing, or just hang out with other people doing AI-driven audio editing. Communities grow one person telling another this exists, so if you know someone who'd get value out of this, send them the link.
+
+<p align="center">
+  <a href="https://discord.gg/BGn8Ujh37m">
+    <img src="https://img.shields.io/badge/Join_the_Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join the Discord" />
+  </a>
+</p>
+
+---
+
 ## Support
 
 If AudacityMCP has saved you time or helped with your audio projects, consider buying me a coffee:
