@@ -20,7 +20,13 @@ def _get_blocked_dirs():
             prog86 = os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
             _BLOCKED_DIRS.add(os.path.normcase(os.path.realpath(prog86)))
         else:
-            for d in ("/System", "/Library", "/usr", "/bin", "/sbin", "/etc", "/var"):
+            # /var deliberately excluded — on macOS it's a symlink to
+            # /private/var, which is also where the real temp directory
+            # lives (/private/var/folders/.../T/...), so blocking it
+            # would block every legitimate temp-file write on macOS too.
+            # Reaper-MCP's equivalent blocklist already excludes it for
+            # the same reason.
+            for d in ("/System", "/Library", "/usr", "/bin", "/sbin", "/etc"):
                 if os.path.isdir(d):
                     _BLOCKED_DIRS.add(os.path.realpath(d))
     return _BLOCKED_DIRS

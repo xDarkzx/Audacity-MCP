@@ -1,3 +1,6 @@
+import os
+import tempfile
+
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock, PropertyMock
 from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
@@ -63,10 +66,15 @@ class TestValidation:
 
     def test_invalid_format(self, registered_tools):
         tool = registered_tools["transcribe_to_file"]
+        # Format validation is what's under test here, not path validation —
+        # use a genuinely cross-platform absolute path (a hardcoded POSIX
+        # "/tmp/..." string isn't absolute on Windows, which would fail the
+        # path check before the format check ever runs).
+        out_path = os.path.join(tempfile.gettempdir(), "out.txt")
         with pytest.raises(AudacityMCPError) as exc:
             import asyncio
             asyncio.run(
-                tool.fn(path="/tmp/out.txt", format="docx")
+                tool.fn(path=out_path, format="docx")
             )
         assert exc.value.code == ErrorCode.INVALID_FORMAT
 
