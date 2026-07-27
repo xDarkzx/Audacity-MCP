@@ -2,6 +2,14 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [0.1.11] - 2026-07-28
+
+### Double-Clickable GPU Setup
+
+- **Added `setup_gpu.bat` (Windows) and `setup_gpu.sh` (macOS/Linux)** at the repo root, alongside `install.bat`/`install.sh`. Same one-click pattern: no terminal, no typed commands — just download and double-click (or run). They wrap `python -m audacity_mcp.setup_transcription` (not the bare `audacity-mcp-setup-gpu` command) so they only depend on `python` being on PATH, not pip's Scripts directory too. `setup_gpu.bat` runs via `cmd.exe`, not PowerShell, so it isn't affected by PowerShell's execution-policy restriction that blocks `.ps1` scripts by default on Windows.
+- `install.bat`/`install.sh` now mention `setup_gpu.bat`/`setup_gpu.sh` in their "Next steps" so new users discover GPU setup without needing to read the docs.
+- README + `docs/INSTALLATION.md` link to both scripts as an alternative to the `audacity-mcp-setup-gpu` command.
+
 ## [0.1.10] - 2026-07-28
 
 ### GPU Transcription Setup & Clarity

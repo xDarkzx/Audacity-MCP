@@ -226,6 +226,8 @@ echo   3. Ask Claude: "Get info about the current Audacity project"
 echo.
 echo  If you see project info, you're all set!
 echo.
+echo  Using Transcription? Have an NVIDIA GPU? Run setup_gpu.bat for 10-20x faster transcription.
+echo.
 echo  Docs: https://github.com/xDarkzx/Audacity-MCP
 echo  If this is useful to you, a star on GitHub helps other people find it!
 echo  ============================================

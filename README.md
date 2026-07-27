@@ -305,7 +305,7 @@ Powered by [faster-whisper](https://github.com/SYSTRAN/faster-whisper) — runs 
 
 > **Setup required before first use:** See [Transcription Setup](docs/INSTALLATION.md#transcription-setup-optional) for installation steps.
 
-**Want GPU acceleration (10-20x faster)?** Run `audacity-mcp-setup-gpu` — detects your GPU, installs what's needed, and verifies it actually works. **NVIDIA GPUs only** (AMD/Intel graphics and macOS aren't supported by the transcription backend at all — any NVIDIA card works, GeForce isn't a requirement, just having an NVIDIA GPU is). No NVIDIA GPU? CPU works fine, just slower on long files.
+**Want GPU acceleration (10-20x faster)?** Run `audacity-mcp-setup-gpu` — or download [`setup_gpu.bat`](setup_gpu.bat)/[`setup_gpu.sh`](setup_gpu.sh) and double-click/run it if you'd rather not use a terminal. Detects your GPU, installs what's needed, and verifies it actually works. **NVIDIA GPUs only** (AMD/Intel graphics and macOS aren't supported by the transcription backend at all — any NVIDIA card works, GeForce isn't a requirement, just having an NVIDIA GPU is). No NVIDIA GPU? CPU works fine, just slower on long files.
 
 ---
 

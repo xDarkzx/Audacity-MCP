@@ -270,6 +270,8 @@ GPU makes transcription **10-20x faster**. A 3-minute file takes ~10 seconds on 
 audacity-mcp-setup-gpu
 ```
 
+Not comfortable with a terminal? Download [`setup_gpu.bat`](../setup_gpu.bat) (Windows) or [`setup_gpu.sh`](../setup_gpu.sh) (macOS/Linux) from the repo and double-click it (or run it) instead — same thing, no typing required.
+
 This one command detects your GPU, installs the two required packages (`nvidia-cublas-cu12`, `nvidia-cudnn-cu12`) into the same Python environment `audacity-mcp` runs from, and then actually loads a model on the GPU to confirm it works — instead of you finding out later that transcription silently fell back to CPU. No CUDA toolkit install needed.
 
 > **Important:** GPU acceleration requires an **NVIDIA** GPU specifically — it uses faster-whisper's CTranslate2 backend, which doesn't support AMD or Intel graphics, or Apple Silicon/macOS (no ROCm/oneAPI/Metal path). This isn't something a driver update can fix; if your GPU isn't NVIDIA, transcription runs on CPU, full stop. If it *is* NVIDIA, the model doesn't matter — GeForce, Quadro, RTX Axxx workstation cards, older GTX — any of them work as long as the driver is reasonably current. "GeForce" vs "not GeForce" isn't the deciding factor.
