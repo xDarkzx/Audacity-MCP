@@ -61,23 +61,24 @@ def _validate_task(task: str) -> None:
 
 
 def _setup_cuda_path():
-    """Add NVIDIA pip package DLL paths to system PATH so faster-whisper can find them."""
-    try:
-        import nvidia.cublas
-        if nvidia.cublas.__file__:
-            cublas_bin = os.path.join(os.path.dirname(nvidia.cublas.__file__), "bin")
-            if cublas_bin not in os.environ.get("PATH", ""):
-                os.environ["PATH"] = cublas_bin + os.pathsep + os.environ.get("PATH", "")
-    except (ImportError, AttributeError, OSError):
-        pass
-    try:
-        import nvidia.cudnn
-        if nvidia.cudnn.__file__:
-            cudnn_bin = os.path.join(os.path.dirname(nvidia.cudnn.__file__), "bin")
-            if cudnn_bin not in os.environ.get("PATH", ""):
-                os.environ["PATH"] = cudnn_bin + os.pathsep + os.environ.get("PATH", "")
-    except (ImportError, AttributeError, OSError):
-        pass
+    """Add NVIDIA pip package DLL paths to system PATH so faster-whisper can find them.
+
+    Uses __path__, not __file__: nvidia-cublas-cu12/nvidia-cudnn-cu12 are PEP 420
+    namespace packages (no __init__.py), so __file__ is None on current package
+    versions - the old __file__-based check silently skipped on every call and
+    never added anything to PATH. __path__ is always populated.
+    """
+    for pkg in ("cublas", "cudnn"):
+        try:
+            module = __import__(f"nvidia.{pkg}", fromlist=[pkg])
+            pkg_dir = next(iter(module.__path__), None)
+            if not pkg_dir:
+                continue
+            bin_dir = os.path.join(pkg_dir, "bin")
+            if bin_dir not in os.environ.get("PATH", ""):
+                os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+        except (ImportError, AttributeError, OSError):
+            pass
 
 
 def _cuda_is_available() -> bool:

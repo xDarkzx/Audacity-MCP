@@ -2,6 +2,17 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [0.1.10] - 2026-07-28
+
+### GPU Transcription Setup & Clarity
+
+Prompted by a user report of transcription "seeming to time out / run on CPU" with no clear way to check why:
+
+- **New `audacity-mcp-setup-gpu` command**: one-step GPU setup for transcription. Detects an NVIDIA GPU via `nvidia-smi`, installs `nvidia-cublas-cu12`/`nvidia-cudnn-cu12` into the exact Python environment `audacity-mcp` itself runs from (installing into the wrong environment was a real, common failure mode with the old manual instructions), and then actually loads a model on the GPU to confirm it works — instead of finding out later that it silently fell back to CPU. Cleanly reports "no NVIDIA GPU detected" and exits successfully (CPU is fine) rather than erroring when there's no GPU to find.
+- **Fixed a real bug in `_setup_cuda_path()`** (`audacity_mcp/tools/transcription_tools.py`): it read `nvidia.cublas.__file__`/`nvidia.cudnn.__file__` to locate the DLL directories, but current `nvidia-cublas-cu12`/`nvidia-cudnn-cu12` releases are PEP 420 namespace packages with no `__init__.py`, so `__file__` is `None` — the function's own guard against that silently skipped every time, meaning it never actually added anything to PATH. Switched to `__path__`, which is always populated. (In practice this wasn't the root cause of the CPU-fallback report — testing showed `ctranslate2` finds the DLLs on its own regardless — but it was still dead, broken code worth fixing since it was found in the course of building the setup script.)
+- **Documented in README + `docs/INSTALLATION.md`**: GPU acceleration is NVIDIA-only — AMD/Intel graphics and macOS aren't supported by faster-whisper's CTranslate2 backend at all, no driver update fixes that. GeForce vs. Quadro/RTX-workstation/older-GTX doesn't matter; any reasonably current NVIDIA GPU works. Added manual verification steps (Task Manager GPU usage, `nvidia-smi`, direct `WhisperModel` repro) for anyone who wants to check without the new script.
+- Added `tests/test_transcription.py::TestSetupCudaPath` regression test for the namespace-package fix.
+
 ## [0.1.9] - 2026-07-25
 
 ### Snap / Flatpak Audacity Support (Linux)

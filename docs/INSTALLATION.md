@@ -267,10 +267,30 @@ This downloads the `small` model (~488 MB) — the best balance of speed and acc
 GPU makes transcription **10-20x faster**. A 3-minute file takes ~10 seconds on GPU vs 4+ minutes on CPU.
 
 ```bash
+audacity-mcp-setup-gpu
+```
+
+This one command detects your GPU, installs the two required packages (`nvidia-cublas-cu12`, `nvidia-cudnn-cu12`) into the same Python environment `audacity-mcp` runs from, and then actually loads a model on the GPU to confirm it works — instead of you finding out later that transcription silently fell back to CPU. No CUDA toolkit install needed.
+
+> **Important:** GPU acceleration requires an **NVIDIA** GPU specifically — it uses faster-whisper's CTranslate2 backend, which doesn't support AMD or Intel graphics, or Apple Silicon/macOS (no ROCm/oneAPI/Metal path). This isn't something a driver update can fix; if your GPU isn't NVIDIA, transcription runs on CPU, full stop. If it *is* NVIDIA, the model doesn't matter — GeForce, Quadro, RTX Axxx workstation cards, older GTX — any of them work as long as the driver is reasonably current. "GeForce" vs "not GeForce" isn't the deciding factor.
+
+**Don't have an NVIDIA GPU, or ran into the manual pip install before this script existed?** `audacity-mcp-setup-gpu` is safe to run either way — it detects "no NVIDIA GPU" cleanly and just confirms CPU is fine, no errors.
+
+<details>
+<summary>Manual install / troubleshooting (if you'd rather not use the script)</summary>
+
+```bash
 pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
 ```
 
-That's it — AudacityMCP automatically detects GPU and uses it. No CUDA toolkit install needed. If you don't have an NVIDIA GPU, skip this — CPU works fine, just slower on long files.
+Make sure this installs into the **same** Python environment that runs `audacity-mcp` — a common failure mode is installing these into a different venv or system Python than the one Claude Desktop actually launches. Run `where audacity-mcp` (Windows) / `which audacity-mcp` (macOS/Linux) to see which install is in use, then use that same Python's `pip`.
+
+**To verify it's actually using the GPU** (rather than silently falling back to CPU):
+- Watch Task Manager → Performance → GPU while transcribing — usage should spike.
+- Or run `nvidia-smi` right as a transcription starts — you should see a `python.exe`/`python` process listed with memory allocated.
+- Or reproduce the exact code path directly: `python -c "from faster_whisper import WhisperModel; WhisperModel('tiny', device='cuda', compute_type='float16'); print('GPU OK')"`. If this throws an error, that's the same error the server swallows internally before falling back to CPU.
+
+</details>
 
 ---
 
@@ -285,6 +305,7 @@ That's it — AudacityMCP automatically detects GPU and uses it. No CUDA toolkit
 | "Access denied" (Windows) | Running Audacity and client as different users | Run both as the same user (don't mix admin/non-admin) |
 | Pipes missing in /tmp (macOS/Linux) | Audacity didn't create them | Check Audacity is running, check console for errors |
 | "No module named faster_whisper" | Not installed | `pip install faster-whisper` |
+| Transcription works but is slow / seems to be on CPU | GPU packages missing, installed into the wrong Python environment, or no NVIDIA GPU | Run `audacity-mcp-setup-gpu` — it detects your GPU, installs what's needed, and confirms GPU transcription actually works (or tells you why not) |
 | Model download fails | Network issue | Check internet and retry — models cache after first download |
 | Config not working | Wrong path or JSON syntax | Copy the complete example above, replace paths, validate JSON at jsonlint.com |
 | Installer says config not found, but Audacity runs fine | You're running a **portable** Audacity (a `Portable Settings` folder next to the executable) | It stores `audacity.cfg` there instead of the normal location — enable `mod-script-pipe` manually (Preferences → Modules) |

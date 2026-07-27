@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "audacity-mcp"
-version = "0.1.9"
+version = "0.1.10"
 description = "MCP server for AI-driven audio editing in Audacity via mod-script-pipe"
 license = "Apache-2.0"
 authors = [
@@ -41,3 +41,4 @@ packages = ["audacity_mcp", "audacity_mcp_shared"]
 
 [project.scripts]
 audacity-mcp = "audacity_mcp.main:main"
+audacity-mcp-setup-gpu = "audacity_mcp.setup_transcription:main"

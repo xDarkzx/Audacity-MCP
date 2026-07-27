@@ -197,3 +197,27 @@ class TestCheckStatus:
         tool = registered_tools["check_transcription_status"]
         result = await tool.fn(job_id="nonexistent")
         assert "error" in result
+
+
+class TestSetupCudaPath:
+    def test_adds_bin_dir_for_namespace_package_with_no_file(self, monkeypatch):
+        # nvidia-cublas-cu12 / nvidia-cudnn-cu12 are PEP 420 namespace packages
+        # (no __init__.py), so __file__ is None on current package versions -
+        # only __path__ is reliably populated. Fake both that way.
+        import sys
+        import types
+        from audacity_mcp.tools.transcription_tools import _setup_cuda_path
+
+        for pkg in ("cublas", "cudnn"):
+            fake_module = types.ModuleType(f"nvidia.{pkg}")
+            fake_module.__file__ = None
+            fake_module.__path__ = [f"/fake/nvidia/{pkg}"]
+            monkeypatch.setitem(sys.modules, f"nvidia.{pkg}", fake_module)
+        monkeypatch.setitem(sys.modules, "nvidia", types.ModuleType("nvidia"))
+        monkeypatch.setenv("PATH", "")
+
+        _setup_cuda_path()
+
+        path = os.environ["PATH"]
+        assert os.path.join("/fake/nvidia/cublas", "bin") in path
+        assert os.path.join("/fake/nvidia/cudnn", "bin") in path
