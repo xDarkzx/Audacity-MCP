@@ -294,6 +294,30 @@ Make sure this installs into the **same** Python environment that runs `audacity
 
 </details>
 
+<details>
+<summary>Ran <code>audacity-mcp-setup-gpu</code>, it said success, but transcription is STILL on CPU?</summary>
+
+This means the script installed and verified GPU support in one Python environment, but Claude Desktop is launching `audacity-mcp` from a **different** one — so it can't see what was just installed. This mainly happens if you have more than one Python installed (e.g. python.org **and** a Microsoft Store one), or if you set up AudacityMCP from source and the config still points at an old/moved Python — a normal one-Python, one-sitting install won't hit this.
+
+To fix it:
+
+1. Note the Python path `audacity-mcp-setup-gpu` printed, e.g. `Installing nvidia-cublas-cu12 and nvidia-cudnn-cu12... (into C:\Python314\python.exe)` — that exact path is the one that has GPU support.
+2. Open your Claude Desktop config: `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS).
+3. Find the `"audacity"` entry under `"mcpServers"`. If `"command"` is the plain string `"audacity-mcp"`, run `where audacity-mcp` (Windows) / `which audacity-mcp` (macOS) and check the path it resolves to — is it tied to the *same* Python as step 1?
+4. If it doesn't match (or you're not sure), edit the entry to point directly at the Python from step 1:
+   ```json
+   "audacity": {
+     "command": "C:\\Python314\\python.exe",
+     "args": ["-m", "audacity_mcp.main"]
+   }
+   ```
+   (macOS/Linux: use that platform's path instead, no double backslashes needed.)
+5. Save, restart Claude Desktop, and try transcription again.
+
+We deliberately don't auto-edit this file for you — it's shared with any other MCP servers you've configured, and a script silently rewriting it is more risk than it's worth. This is a five-minute manual fix once you know what to look for.
+
+</details>
+
 ---
 
 ## Troubleshooting
@@ -307,7 +331,8 @@ Make sure this installs into the **same** Python environment that runs `audacity
 | "Access denied" (Windows) | Running Audacity and client as different users | Run both as the same user (don't mix admin/non-admin) |
 | Pipes missing in /tmp (macOS/Linux) | Audacity didn't create them | Check Audacity is running, check console for errors |
 | "No module named faster_whisper" | Not installed | `pip install faster-whisper` |
-| Transcription works but is slow / seems to be on CPU | GPU packages missing, installed into the wrong Python environment, or no NVIDIA GPU | Run `audacity-mcp-setup-gpu` — it detects your GPU, installs what's needed, and confirms GPU transcription actually works (or tells you why not) |
+| Transcription works but is slow / seems to be on CPU | GPU packages missing or no NVIDIA GPU | Run `audacity-mcp-setup-gpu` — it detects your GPU, installs what's needed, and confirms GPU transcription actually works (or tells you why not) |
+| `audacity-mcp-setup-gpu` said success, but transcription is still on CPU | Claude Desktop is launching `audacity-mcp` from a *different* Python than the one the script just verified | See ["Ran `audacity-mcp-setup-gpu`... still on CPU?"](#transcription-setup-optional) above — usually a multi-Python or from-source config pointing at a stale/different interpreter |
 | Model download fails | Network issue | Check internet and retry — models cache after first download |
 | Config not working | Wrong path or JSON syntax | Copy the complete example above, replace paths, validate JSON at jsonlint.com |
 | Installer says config not found, but Audacity runs fine | You're running a **portable** Audacity (a `Portable Settings` folder next to the executable) | It stores `audacity.cfg` there instead of the normal location — enable `mod-script-pipe` manually (Preferences → Modules) |
