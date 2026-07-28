@@ -299,10 +299,12 @@ def register(mcp: FastMCP):
             # Step 4: Optional — add labels to Audacity
             if add_labels:
                 job["current_step"] = "adding labels to Audacity"
-                for seg in segments:
+                from audacity_mcp.tools.label_tools import count_existing_labels
+                base_index = await count_existing_labels(client)
+                for i, seg in enumerate(segments):
                     await client.execute("SelectTime", Start=seg["start"], End=seg["end"])
                     await client.execute("AddLabel")
-                    await client.execute("SetLabel", Label=0, Text=seg["text"])
+                    await client.execute("SetLabel", Label=base_index + i, Text=seg["text"])
                 job["steps_completed"].append(f"added {len(segments)} labels")
 
             # Step 5: Optional — export to file

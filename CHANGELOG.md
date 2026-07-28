@@ -2,6 +2,18 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [0.1.13] - 2026-07-28
+
+### Labels Overwriting Each Other
+
+Reported by a user: transcribing with `add_labels=True` (or adding several labels via `label_add`/`label_add_at` in a row, e.g. asking Claude to mark episode boundaries in a long track) left every label blank except the first, which ended up with the *last* label's text.
+
+- **Root cause**: `label_add`, `label_add_at`, and the transcription auto-labeling loop all called `SetLabel(Label=0, ...)` unconditionally after `AddLabel`. `AddLabel` doesn't report back the index of the label it just created, and `Label=0` doesn't mean "the label just added" — it means "the very first label in the project," full stop. So every `SetLabel` call kept retargeting that same first label, overwriting it each time, while every other newly-created label stayed blank.
+- **Fix**: added `count_existing_labels()` (`audacity_mcp/tools/label_tools.py`) — queries `GetInfo Type=Labels`, parses the JSON, and counts labels already in the project. Since `AddLabel` appends, the new label's index is exactly that count (or `count + i` for the i-th label added in a batch, in `label_add`/`label_add_at`/the transcription loop). Confirmed via a related [Audacity GitHub issue](https://github.com/audacity/audacity/issues/1577) that label indices are assigned in creation order, 0-based — the same assumption this fix relies on.
+- **Known caveat, not addressed here**: that same GitHub issue shows `SetLabel` can fail past label index ~100 in some Audacity versions. Not something to work around speculatively without knowing which versions are affected, but worth knowing if a transcript has 100+ segments.
+- **Not independently tested against a live Audacity instance** — verified via unit tests with mocked `GetInfo`/`SetLabel` responses and the corroborating GitHub issue, since no running Audacity was available to test against directly. Please verify against real Audacity before considering this fully closed.
+- Added `tests/test_label_tools.py`.
+
 ## [0.1.12] - 2026-07-28
 
 ### GPU Detection False Negative
