@@ -2,6 +2,16 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [0.1.12] - 2026-07-28
+
+### GPU Detection False Negative
+
+Reported by a user who ran `audacity-mcp-setup-gpu` (which confirmed GPU transcription worked) and restarted Claude Desktop, but the actual server logs still showed `Loading whisper model 'small' on CPU...` with no "GPU failed" message in between — meaning `_cuda_is_available()` returned `False` before a GPU attempt was even made.
+
+- **Fixed `_cuda_is_available()`** (`audacity_mcp/tools/transcription_tools.py`): it trusted `torch.cuda.is_available()` exclusively when torch was importable, returning immediately on `False` without ever running the actual check that matters. faster-whisper runs on CTranslate2, not torch — a coincidentally-installed CPU-only (or mismatched-CUDA) torch build could silently mask a perfectly working `nvidia-cublas-cu12`/`nvidia-cudnn-cu12` install. Now torch is only trusted for a *positive* answer; `False` or an import failure falls through to the real `cublas64_12.dll`/`libcublas.so` load check.
+- Most likely underlying cause for this specific report is still an environment mismatch (packages installed where `setup_gpu` ran vs. the Python Claude Desktop's config actually launches) — the torch issue is a separate, independently real bug found investigating the same report.
+- Added `tests/test_transcription.py::TestCudaIsAvailable` covering: torch-False-falls-through, torch-True-short-circuits, no-torch-no-cublas, and the macOS no-CUDA path.
+
 ## [0.1.11] - 2026-07-28
 
 ### Double-Clickable GPU Setup

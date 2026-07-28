@@ -221,3 +221,69 @@ class TestSetupCudaPath:
         path = os.environ["PATH"]
         assert os.path.join("/fake/nvidia/cublas", "bin") in path
         assert os.path.join("/fake/nvidia/cudnn", "bin") in path
+
+
+class TestCudaIsAvailable:
+    def _fake_torch(self, cuda_available: bool):
+        import types
+        fake_torch = types.ModuleType("torch")
+        fake_torch.cuda = types.SimpleNamespace(is_available=lambda: cuda_available)
+        return fake_torch
+
+    def test_torch_false_falls_through_to_ctypes_check(self, monkeypatch):
+        # Regression: a coincidentally-installed CPU-only (or mismatched-CUDA)
+        # torch build must not mask a working nvidia-cublas-cu12 install -
+        # faster-whisper runs on CTranslate2, not torch.
+        import sys
+        from audacity_mcp.tools.transcription_tools import _cuda_is_available
+
+        monkeypatch.setitem(sys.modules, "torch", self._fake_torch(cuda_available=False))
+        monkeypatch.setattr(sys, "platform", "win32")
+        monkeypatch.setattr("ctypes.cdll.LoadLibrary", lambda name: object())
+
+        assert _cuda_is_available() is True
+
+    def test_torch_true_short_circuits(self, monkeypatch):
+        import sys
+        from audacity_mcp.tools.transcription_tools import _cuda_is_available
+
+        monkeypatch.setitem(sys.modules, "torch", self._fake_torch(cuda_available=True))
+
+        def _boom(name):
+            pytest.fail("should not reach the ctypes check when torch reports True")
+
+        monkeypatch.setattr("ctypes.cdll.LoadLibrary", _boom)
+
+        assert _cuda_is_available() is True
+
+    def test_no_torch_no_cublas_returns_false(self, monkeypatch):
+        import builtins
+        import sys
+        from audacity_mcp.tools.transcription_tools import _cuda_is_available
+
+        monkeypatch.delitem(sys.modules, "torch", raising=False)
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "torch":
+                raise ImportError("no torch")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        monkeypatch.setattr(sys, "platform", "win32")
+
+        def _raise(name):
+            raise OSError("DLL not found")
+
+        monkeypatch.setattr("ctypes.cdll.LoadLibrary", _raise)
+
+        assert _cuda_is_available() is False
+
+    def test_macos_always_false(self, monkeypatch):
+        import sys
+        from audacity_mcp.tools.transcription_tools import _cuda_is_available
+
+        monkeypatch.setitem(sys.modules, "torch", self._fake_torch(cuda_available=False))
+        monkeypatch.setattr(sys, "platform", "darwin")
+
+        assert _cuda_is_available() is False

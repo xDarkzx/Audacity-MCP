@@ -82,19 +82,28 @@ def _setup_cuda_path():
 
 
 def _cuda_is_available() -> bool:
-    """Check if CUDA is actually usable — not just installed but functional."""
+    """Check if CUDA is actually usable — not just installed but functional.
+
+    torch is only trusted for a POSITIVE answer. faster-whisper runs on
+    CTranslate2, not torch — a coincidentally-installed CPU-only (or
+    mismatched-CUDA) torch build must not short-circuit this to False and
+    mask a perfectly working nvidia-cublas-cu12/nvidia-cudnn-cu12 install,
+    which is what CTranslate2 actually needs. So a torch import failure or
+    a torch False falls through to the real check instead of stopping here.
+    """
     try:
         import torch
-        return torch.cuda.is_available()
+        if torch.cuda.is_available():
+            return True
     except ImportError:
         pass
-    # Fallback: try loading CUDA library directly
+    if sys.platform == "darwin":
+        return False  # macOS has no CUDA support
+    # Check the library CTranslate2 actually loads, directly.
     try:
         import ctypes
         if sys.platform == "win32":
             ctypes.cdll.LoadLibrary("cublas64_12.dll")
-        elif sys.platform == "darwin":
-            return False  # macOS has no CUDA support
         else:
             ctypes.cdll.LoadLibrary("libcublas.so")
         return True
