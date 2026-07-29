@@ -1,3 +1,4 @@
+<!-- mcp-name: io.github.xDarkzx/audacity-mcp -->
 <h1 align="center">AudacityMCP</h1>
 
 <p align="center">
