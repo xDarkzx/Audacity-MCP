@@ -26,7 +26,15 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "mcp[cli]>=1.0.0",
+    # Upper-bounded deliberately: mcp 2.0.0 is a real, confirmed breaking
+    # release (removed/restructured mcp.server.fastmcp, which every tool
+    # module in this project imports) that broke CI on a commit that
+    # changed nothing dependency-related - a fresh `pip install` alone
+    # was enough to pull it in under the old unbounded ">=1.0.0" pin.
+    # Bump the ceiling only after actually testing against a real 2.x
+    # release. (Same issue hit and fixed the same way across this user's
+    # other MCP-server repos: SongForge-MCP, Reaper-MCP.)
+    "mcp[cli]>=1.0.0,<2.0.0",
     "faster-whisper>=1.0.0",
 ]
 
