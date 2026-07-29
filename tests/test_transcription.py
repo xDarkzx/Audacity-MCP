@@ -287,3 +287,104 @@ class TestCudaIsAvailable:
         monkeypatch.setattr(sys, "platform", "darwin")
 
         assert _cuda_is_available() is False
+
+
+class TestRunTranscriptionProgress:
+    def test_on_progress_called_once_per_segment(self, monkeypatch):
+        from audacity_mcp.tools.transcription_tools import _run_transcription
+
+        monkeypatch.setattr(
+            "audacity_mcp.tools.transcription_tools._get_model",
+            lambda size: MagicMock(transcribe=fake_transcribe),
+        )
+
+        calls = []
+        results, info = _run_transcription("fake.wav", "tiny", None, "transcribe", on_progress=lambda: calls.append(1))
+
+        assert len(calls) == len(make_fake_segments())
+        assert len(results) == len(make_fake_segments())
+
+    def test_on_progress_is_optional(self, monkeypatch):
+        from audacity_mcp.tools.transcription_tools import _run_transcription
+
+        monkeypatch.setattr(
+            "audacity_mcp.tools.transcription_tools._get_model",
+            lambda size: MagicMock(transcribe=fake_transcribe),
+        )
+
+        results, info = _run_transcription("fake.wav", "tiny", None, "transcribe")
+        assert len(results) == len(make_fake_segments())
+
+
+class TestStaleJobCleanup:
+    # Reported bug: long files (thousands of segments, each needing a
+    # SelectTime+AddLabel+SetLabel round trip) legitimately run past 10
+    # minutes total, but were being killed mid-way because staleness was
+    # keyed on time-since-start rather than time-since-last-progress -
+    # silently truncating labels partway through the file.
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_recent_progress_survives_despite_old_start_time(self, registered_tools):
+        import time
+        from audacity_mcp.tools.transcription_tools import _jobs, _STALE_JOB_TIMEOUT
+
+        job_id = "test-recent-progress"
+        _jobs[job_id] = {
+            "status": "running",
+            "current_step": "adding labels to Audacity (500/3000)",
+            "steps_completed": [],
+            "started_at": time.time() - (_STALE_JOB_TIMEOUT + 100),
+            "last_progress_at": time.time(),
+            "result": None,
+            "error": None,
+        }
+        try:
+            tool = registered_tools["check_transcription_status"]
+            result = await tool.fn(job_id=job_id)
+            assert result["status"] == "running"
+        finally:
+            _jobs.pop(job_id, None)
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_no_recent_progress_is_killed(self, registered_tools):
+        import time
+        from audacity_mcp.tools.transcription_tools import _jobs, _STALE_JOB_TIMEOUT
+
+        job_id = "test-stuck"
+        _jobs[job_id] = {
+            "status": "running",
+            "current_step": "transcribing audio",
+            "steps_completed": [],
+            "started_at": time.time() - (_STALE_JOB_TIMEOUT + 100),
+            "last_progress_at": time.time() - (_STALE_JOB_TIMEOUT + 50),
+            "result": None,
+            "error": None,
+        }
+        try:
+            tool = registered_tools["check_transcription_status"]
+            result = await tool.fn(job_id=job_id)
+            assert result["status"] == "error"
+            assert "No progress" in result["error"]
+        finally:
+            _jobs.pop(job_id, None)
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_missing_last_progress_at_falls_back_to_started_at(self, registered_tools):
+        import time
+        from audacity_mcp.tools.transcription_tools import _jobs, _STALE_JOB_TIMEOUT
+
+        job_id = "test-legacy-shape"
+        _jobs[job_id] = {
+            "status": "running",
+            "current_step": "transcribing audio",
+            "steps_completed": [],
+            "started_at": time.time() - (_STALE_JOB_TIMEOUT + 100),
+            "result": None,
+            "error": None,
+        }
+        try:
+            tool = registered_tools["check_transcription_status"]
+            result = await tool.fn(job_id=job_id)
+            assert result["status"] == "error"
+        finally:
+            _jobs.pop(job_id, None)

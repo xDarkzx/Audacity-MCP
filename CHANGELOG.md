@@ -2,6 +2,16 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [0.1.14] - 2026-07-29
+
+### Long Transcriptions Getting Silently Truncated
+
+Reported by a user: a 48-minute file only got ~23 minutes labeled, a 4.5-hour file only got ~45 minutes labeled — both cut off partway through, no error shown.
+
+- **Root cause**: `_cleanup_stale_jobs()` killed any transcription job running longer than `_STALE_JOB_TIMEOUT` (10 minutes) measured from **job start**, regardless of whether it was still actively progressing. The label-adding loop does a `SelectTime`+`AddLabel`+`SetLabel` round trip *per segment* — a multi-hour transcript can have thousands of segments, so that loop alone can legitimately run past 10 minutes even when working correctly. The next time `check_transcription_status` got polled after the 10-minute mark, it silently cancelled the still-running task mid-loop, leaving only whatever labels had been added so far.
+- **Fix**: staleness is now measured from **time since last progress**, not time since start. Every step transition and every single label added now updates a `last_progress_at` timestamp; a job only gets killed after 10 minutes with *no* forward progress (i.e. actually stuck), not just for running long on a big file. Also threaded progress reporting through the transcription step itself (`_run_transcription` now accepts an `on_progress` callback, called per-segment), so a slow CPU transcription of a very long file can't hit the same wall before labeling even starts.
+- Added `tests/test_transcription.py::TestStaleJobCleanup` and `TestRunTranscriptionProgress`.
+
 ## [0.1.13] - 2026-07-28
 
 ### Labels Overwriting Each Other
