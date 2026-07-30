@@ -49,6 +49,53 @@ def registered_tools(mock_client):
     return mcp._tool_manager._tools
 
 
+class TestGetCacheDir:
+    # Regression: the manual pre-download command from the setup docs uses
+    # huggingface_hub's own default resolution (which honors HF_HOME /
+    # HUGGINGFACE_HUB_CACHE), but this project's own cache lookup used to
+    # hardcode ~/.cache/huggingface/hub unconditionally - so a user with
+    # either variable set (common when redirecting model caches to a
+    # different drive) would have the pre-downloaded model in one place and
+    # the running server looking in another, forever re-downloading.
+
+    def test_honors_huggingface_hub_cache(self, monkeypatch, tmp_path):
+        from audacity_mcp.tools.transcription_tools import _get_cache_dir
+
+        explicit = str(tmp_path / "explicit-cache")
+        monkeypatch.setenv("HUGGINGFACE_HUB_CACHE", explicit)
+        monkeypatch.delenv("HF_HOME", raising=False)
+
+        assert _get_cache_dir() == explicit
+
+    def test_honors_hf_home(self, monkeypatch, tmp_path):
+        from audacity_mcp.tools.transcription_tools import _get_cache_dir
+
+        hf_home = str(tmp_path / "hf-home")
+        monkeypatch.delenv("HUGGINGFACE_HUB_CACHE", raising=False)
+        monkeypatch.setenv("HF_HOME", hf_home)
+
+        result = _get_cache_dir()
+        assert result == os.path.join(hf_home, "hub")
+
+    def test_falls_back_to_hardcoded_default_when_unset(self, monkeypatch):
+        from audacity_mcp.tools.transcription_tools import _get_cache_dir
+
+        monkeypatch.delenv("HUGGINGFACE_HUB_CACHE", raising=False)
+        monkeypatch.delenv("HF_HOME", raising=False)
+
+        result = _get_cache_dir()
+        assert result == os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+
+    def test_huggingface_hub_cache_takes_priority_over_hf_home(self, monkeypatch, tmp_path):
+        from audacity_mcp.tools.transcription_tools import _get_cache_dir
+
+        explicit = str(tmp_path / "explicit-wins")
+        monkeypatch.setenv("HUGGINGFACE_HUB_CACHE", explicit)
+        monkeypatch.setenv("HF_HOME", str(tmp_path / "hf-home-loses"))
+
+        assert _get_cache_dir() == explicit
+
+
 class TestValidation:
     def test_invalid_model_size(self, registered_tools):
         tool = registered_tools["transcribe_audio"]
@@ -117,6 +164,22 @@ class TestTranscribeToLabels:
         result = await tool.fn(model_size="base")
         assert "job_id" in result
 
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_task_translate_accepted(self, registered_tools, mock_client):
+        # Regression: task wasn't exposed at all before, forcing a switch to
+        # transcribe_audio + manual label reconstruction just to retry in
+        # translate mode after a bad language auto-detect.
+        tool = registered_tools["transcribe_to_labels"]
+        result = await tool.fn(model_size="base", task="translate")
+        assert "job_id" in result
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_invalid_task_rejected(self, registered_tools, mock_client):
+        tool = registered_tools["transcribe_to_labels"]
+        with pytest.raises(AudacityMCPError) as exc_info:
+            await tool.fn(model_size="base", task="bogus")
+        assert exc_info.value.code == ErrorCode.INVALID_PARAMETER
+
 
 class TestTranscribeToFile:
     @pytest.mark.asyncio(loop_scope="function")
@@ -125,6 +188,21 @@ class TestTranscribeToFile:
         out_path = str(tmp_path / "test.srt")
         result = await tool.fn(path=out_path, format="srt", model_size="base")
         assert "job_id" in result
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_task_translate_accepted(self, registered_tools, mock_client, tmp_path):
+        tool = registered_tools["transcribe_to_file"]
+        out_path = str(tmp_path / "test_translate.srt")
+        result = await tool.fn(path=out_path, format="srt", model_size="base", task="translate")
+        assert "job_id" in result
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_invalid_task_rejected(self, registered_tools, mock_client, tmp_path):
+        tool = registered_tools["transcribe_to_file"]
+        out_path = str(tmp_path / "test_invalid.srt")
+        with pytest.raises(AudacityMCPError) as exc_info:
+            await tool.fn(path=out_path, format="srt", model_size="base", task="bogus")
+        assert exc_info.value.code == ErrorCode.INVALID_PARAMETER
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_vtt_returns_job_id(self, registered_tools, mock_client, tmp_path):

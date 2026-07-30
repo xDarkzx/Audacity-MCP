@@ -2,6 +2,22 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [0.1.15] - 2026-07-29
+
+### Transcription: Wrong-Language Retries, and Model Re-Downloads
+
+Two separate reports while using transcription on real files.
+
+**Retrying a bad language auto-detect required switching tools entirely.** A user's English audio got auto-detected and transcribed as Japanese. Fixing it meant removing the label track and starting over — but `transcribe_to_labels` and `transcribe_to_file` hardcoded `task="transcribe"` and never exposed the parameter at all, so there was no way to retry the *same* tool with `task="translate"` (forces English output) or an explicit `language`. The only way to recover was switching to `transcribe_audio` and manually reconstructing the labels from its output — exactly the tangle it took another Claude session an extra half-dozen tool calls to work around.
+
+- Added `task` to `transcribe_to_labels` and `transcribe_to_file`, matching `transcribe_audio`/`transcribe_selection`.
+- Added docstring guidance across all four transcription tools: auto-detect can occasionally misidentify the language (background music, noise, short/ambiguous clips) — if you already know the language, pass it explicitly instead of trusting auto-detect, and retry with the *same* tool rather than switching.
+
+**A model that was already downloaded appeared to re-download on first use.** `_get_cache_dir()` hardcoded `~/.cache/huggingface/hub`, ignoring `HF_HOME`/`HUGGINGFACE_HUB_CACHE`. The manual pre-download command in the setup docs uses huggingface_hub's own default resolution, which *does* honor those variables — so anyone who has ever redirected their HF cache (common for moving model storage to a bigger/different drive) would have the pre-downloaded model in one place and the running server hardcoded to look in another, re-downloading every time. Not reproduced on this dev machine (no mismatch here), but the hardcoded-path bug is real and independently verifiable in the source regardless.
+
+- `_get_cache_dir()` now checks `HUGGINGFACE_HUB_CACHE`, then `HF_HOME`, before falling back to the hardcoded default — the fallback still exists for its original purpose (some MCP subprocesses on Windows can't resolve huggingface_hub's own default cache path).
+- Added `tests/test_transcription.py::TestGetCacheDir` and extended `TestTranscribeToLabels`/`TestTranscribeToFile` for the `task` parameter.
+
 ## [0.1.14] - 2026-07-29
 
 ### Long Transcriptions Getting Silently Truncated

@@ -26,8 +26,23 @@ _job_lock = asyncio.Lock()
 
 def _get_cache_dir() -> str:
     """Get a reliable cache directory for whisper models.
-    MCP subprocesses on Windows sometimes can't resolve the default huggingface cache."""
-    cache = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+
+    Honors HF_HOME/HUGGINGFACE_HUB_CACHE if the user has set them (so a model
+    pre-downloaded per the setup docs - which respects those same variables via
+    huggingface_hub's own default resolution - is found here too, instead of
+    silently re-downloading into a different, hardcoded location). Falls back
+    to the hardcoded ~/.cache/huggingface/hub only when neither is set, since
+    MCP subprocesses on Windows sometimes can't resolve huggingface_hub's own
+    default cache path.
+    """
+    explicit_cache = os.environ.get("HUGGINGFACE_HUB_CACHE")
+    if explicit_cache:
+        cache = explicit_cache
+    else:
+        hf_home = os.environ.get("HF_HOME")
+        cache = os.path.join(hf_home, "hub") if hf_home else os.path.join(
+            os.path.expanduser("~"), ".cache", "huggingface", "hub"
+        )
     os.makedirs(cache, exist_ok=True)
     return cache
 
@@ -474,6 +489,14 @@ def register(mcp: FastMCP):
         After transcription completes, TELL the user where the transcript was saved
         or offer to save it. Always tell the user the file location so they can find it.
 
+        Language auto-detection can occasionally misidentify the language (background
+        music, noise, a short/ambiguous clip) and transcribe genuinely-English audio
+        in the wrong script entirely. If you already know the audio's language from
+        context, pass `language` explicitly (e.g. "en") instead of relying on
+        auto-detect, or set `task="translate"` to force English output regardless of
+        the spoken language. If a result comes back in an unexpected language/script,
+        just retry with THIS SAME tool and the corrected language/task.
+
         Args:
             model_size: Whisper model - "tiny", "base", "small", "medium", "large-v3". Default: "small"
             language: ISO language code (e.g. "en", "fr") or None for auto-detect
@@ -497,6 +520,10 @@ def register(mcp: FastMCP):
 
         Select a region first, then call this tool.
 
+        Language auto-detection can occasionally misidentify the language on a short
+        or ambiguous clip. If you already know the audio's language, pass `language`
+        explicitly (e.g. "en"), or set `task="translate"` to force English output.
+
         Args:
             model_size: Whisper model - "tiny", "base", "small", "medium", "large-v3"
             language: ISO language code or None for auto-detect
@@ -510,6 +537,7 @@ def register(mcp: FastMCP):
     async def transcribe_to_labels(
         model_size: str = "small",
         language: str | None = None,
+        task: str = "transcribe",
     ) -> dict:
         """[EXPERIMENTAL] Transcribe audio and add Audacity labels at each segment timestamp.
         Requires separate setup — see installation guide.
@@ -517,12 +545,27 @@ def register(mcp: FastMCP):
         Runs in BACKGROUND — returns a job_id immediately.
         Use check_transcription_status to monitor progress.
 
+        Language auto-detection can occasionally misidentify the language (background
+        music, noise, a short/ambiguous clip) and transcribe genuinely-English audio
+        in the wrong script entirely. If you already know the audio's language from
+        context (the user said so, or the labels came back in an unexpected script),
+        don't guess — pass `language` explicitly (e.g. "en"), or set `task="translate"`
+        to force English output regardless of the spoken language. Retry with THIS
+        SAME tool and the corrected language/task; there's no need to switch to a
+        different transcription tool to fix a bad language guess.
+
+        If labels from a previous attempt need clearing first: track_select the label
+        track, then track_remove, before re-running this.
+
         Args:
             model_size: Whisper model - "tiny", "base", "small", "medium", "large-v3"
-            language: ISO language code or None for auto-detect
+            language: ISO language code (e.g. "en") or None for auto-detect
+            task: "transcribe" (labels in the spoken language) or "translate" (labels
+                always in English, regardless of the spoken language)
         """
         _validate_model_size(model_size)
-        return await _start_transcription(model_size, language, "transcribe",
+        _validate_task(task)
+        return await _start_transcription(model_size, language, task,
                                      select_all=True, add_labels=True)
 
     @mcp.tool()
@@ -531,6 +574,7 @@ def register(mcp: FastMCP):
         format: str = "srt",
         model_size: str = "small",
         language: str | None = None,
+        task: str = "transcribe",
     ) -> dict:
         """[EXPERIMENTAL] Transcribe audio and export to a subtitle or text file.
         Requires separate setup — see installation guide.
@@ -542,11 +586,20 @@ def register(mcp: FastMCP):
         Runs in BACKGROUND — returns a job_id immediately.
         Use check_transcription_status to monitor progress.
 
+        Language auto-detection can occasionally misidentify the language (background
+        music, noise, a short/ambiguous clip) and transcribe genuinely-English audio
+        in the wrong script entirely. If you already know the audio's language from
+        context, pass `language` explicitly (e.g. "en"), or set `task="translate"` to
+        force English output regardless of the spoken language. Retry with THIS SAME
+        tool and the corrected language/task — use a new `path` since an existing file
+        at the same path is rejected below.
+
         Args:
             path: Absolute path for the output file (e.g. "C:/Users/You/Documents/transcript.srt")
             format: Output format - "srt", "vtt", or "txt"
             model_size: Whisper model - "tiny", "base", "small", "medium", "large-v3"
-            language: ISO language code or None for auto-detect
+            language: ISO language code (e.g. "en") or None for auto-detect
+            task: "transcribe" (spoken language) or "translate" (always English)
         """
         from audacity_mcp.tools.project_tools import _safe_path
         path = _safe_path(path)
@@ -561,7 +614,8 @@ def register(mcp: FastMCP):
                 f"Invalid format '{format}'. Must be one of: {', '.join(sorted(SUBTITLE_FORMATS))}",
             )
         _validate_model_size(model_size)
-        return await _start_transcription(model_size, language, "transcribe",
+        _validate_task(task)
+        return await _start_transcription(model_size, language, task,
                                      select_all=True, export_path=path, export_format=format)
 
     @mcp.tool()
