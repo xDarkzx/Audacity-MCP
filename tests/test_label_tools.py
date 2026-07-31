@@ -316,6 +316,47 @@ class TestLabelRegionTools:
         assert [c.args[0] for c in client.execute_long.call_args_list] == [command]
 
 
+class TestLabelDeleteRegion:
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_closes_the_gap_by_default(self):
+        client = _mock_client(TWO_LABELS)
+        result = await _register(client)["label_delete_region"].fn(index=1)
+
+        # All tracks first so label tracks ripple with the audio, then the
+        # label's own span, then a gap-closing Delete.
+        assert [c.args[0] for c in client.execute.call_args_list][:3] == [
+            "GetInfo", "SelAllTracks", "SelectTime"]
+        assert _calls_for(client, "SelectTime")[0].kwargs == {"Start": 10.0, "End": 60.0}
+        assert [c.args[0] for c in client.execute_long.call_args_list] == ["Delete"]
+        assert result["closed_gap"] is True
+        assert result["duration_removed"] == 50.0
+        assert result["deleted"]["text"] == "Interview"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_close_gap_false_uses_split_delete(self):
+        client = _mock_client(TWO_LABELS)
+        result = await _register(client)["label_delete_region"].fn(index=0, close_gap=False)
+        assert [c.args[0] for c in client.execute_long.call_args_list] == ["SplitDelete"]
+        assert result["closed_gap"] is False
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_point_label_has_no_audio_to_delete(self):
+        labels = '[["Label Track", [[5.0, 5.0, "marker"]]]]'
+        client = _mock_client(labels)
+        with pytest.raises(AudacityMCPError) as exc:
+            await _register(client)["label_delete_region"].fn(index=0)
+        assert exc.value.code == ErrorCode.VALIDATION_FAILED
+        assert client.execute_long.call_count == 0
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_index_past_end_rejected(self):
+        client = _mock_client(TWO_LABELS)
+        with pytest.raises(AudacityMCPError) as exc:
+            await _register(client)["label_delete_region"].fn(index=7)
+        assert exc.value.code == ErrorCode.VALUE_OUT_OF_RANGE
+        assert client.execute_long.call_count == 0
+
+
 class TestChapterFormatters:
     @pytest.mark.parametrize("seconds,expected", [
         (0, "00:00:00.000"),

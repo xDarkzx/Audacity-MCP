@@ -6,7 +6,7 @@ All notable changes to AudacityMCP will be documented in this file.
 
 ### Working With Labels, Not Just Creating Them
 
-The Labels category could create labels but barely do anything with them: no way to read a label's index, rename one, delete one, or act on the audio underneath. Labels are how you mark up a long recording, so anything driven by those marks — trimming bad takes, redacting a section, exporting chapter markers, splitting a recording into per-segment files — had no path through the server at all. 12 new tools (131 → 143), no changes to existing tool behavior.
+The Labels category could create labels but barely do anything with them: no way to read a label's index, rename one, delete one, or act on the audio underneath. Labels are how you mark up a long recording, so anything driven by those marks — trimming bad takes, redacting a section, exporting chapter markers, splitting a recording into per-segment files — had no path through the server at all. 13 new tools (131 → 144), no changes to existing tool behavior.
 
 **Reading and editing labels.** `label_get_all` returned Audacity's raw `GetInfo` blob with the label JSON unparsed in `["message"]`, so nothing downstream could act on a specific label.
 
@@ -20,7 +20,11 @@ The Labels category could create labels but barely do anything with them: no way
 - Labels on the same track sitting entirely inside the deleted span would be collateral damage, so they are captured beforehand and re-added afterwards. A label that only *partially* overlaps may be trimmed to the boundary — documented in the docstring rather than silently papered over.
 - The tool re-reads the label list afterwards and returns `success: false` if the count didn't actually drop, rather than reporting a delete that never happened.
 
-**Acting on labeled audio.** Five thin wrappers over the labeled-region menu commands: `label_cut_regions` (`CutLabels`), `label_delete_regions` (`DeleteLabels`), `label_silence_regions` (`SilenceLabels`), `label_split_regions` (`SplitLabels`), `label_join_regions` (`JoinLabels`). Label the unwanted stretches and remove them in one pass; label a section and silence it without shortening the material. Every docstring states that these act on the *selected audio tracks* and leave the labels in place — the most likely way to misuse them is to forget the selection step. `CopyLabels`, `SplitCutLabels`, `SplitDeleteLabels` and `DisjoinLabels` were deliberately left out: near-duplicate verbs that would dilute tool selection for little gain, and easy to add if anyone asks.
+**Acting on labeled audio.** Five thin wrappers over the labeled-region menu commands: `label_cut_regions` (`CutLabels`), `label_delete_regions` (`DeleteLabels`), `label_silence_regions` (`SilenceLabels`), `label_split_regions` (`SplitLabels`), `label_join_regions` (`JoinLabels`). Label the unwanted stretches and remove them in one pass; label a section and silence it without shortening the material. Every docstring states that these act on the *selected audio tracks* — the most likely way to misuse them is to forget the selection step. `CopyLabels`, `SplitCutLabels`, `SplitDeleteLabels` and `DisjoinLabels` were deliberately left out: near-duplicate verbs that would dilute tool selection for little gain, and easy to add if anyone asks.
+
+`label_delete_region` covers the single-label case those five can't: it resolves one label's span, selects it, and issues `Delete` (gap closes, later audio shifts left) or `SplitDelete` (timeline length preserved) via `close_gap`. All tracks are selected first so label tracks ripple with the audio and later labels stay aligned — scoping the selection to audio tracks only is what silently desyncs every subsequent label from its audio. Point labels have no audio underneath and are rejected rather than silently doing nothing.
+
+Note on the wording for the region tools: `label_silence_regions`, `label_split_regions` and `label_join_regions` leave the timeline length alone, so the labels genuinely stay put. `label_cut_regions` and `label_delete_regions` close the timeline up, so a labeled region collapses rather than surviving unchanged — their docstrings say so and point at `label_list` for confirming what remains, instead of claiming the labels are untouched.
 
 **Getting labelled work back out.**
 

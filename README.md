@@ -24,7 +24,7 @@
 
 ---
 
-AudacityMCP connects any MCP-compatible AI assistant to [Audacity](https://www.audacityteam.org/), giving it full control over audio editing through 143 tools spanning effects, cleanup, mastering, transcription, and more. Talk to your AI assistant and it edits your audio in real-time.
+AudacityMCP connects any MCP-compatible AI assistant to [Audacity](https://www.audacityteam.org/), giving it full control over audio editing through 144 tools spanning effects, cleanup, mastering, transcription, and more. Talk to your AI assistant and it edits your audio in real-time.
 
 **No cloud. No API keys for audio processing. Everything runs locally through Audacity's named pipe interface.**
 
@@ -181,7 +181,7 @@ AI:   select region → reverb effect → export to FLAC
 
 ## Features
 
-### 143 Tools Across 11 Categories
+### 144 Tools Across 11 Categories
 
 | Category | Tools | Highlights |
 |----------|-------|------------|
@@ -195,7 +195,7 @@ AI:   select region → reverb effect → export to FLAC
 | **Analysis** | 6 | Contrast, clipping detection, spectrum, beat finder, sound labeling |
 | **Generation** | 5 | Tone, noise, chirp, DTMF, rhythm track |
 | **Transcription** (Experimental) | 7 | Full/selection transcribe, to labels, to SRT/VTT/TXT, model preload |
-| **Labels** | 18 | List/find/edit/delete, batch add, cut/delete/silence labeled regions, marker export (simple/cue/Podlove), per-segment audio export, import/export |
+| **Labels** | 19 | List/find/edit/delete, batch add, cut/delete/silence labeled regions, marker export (simple/cue/Podlove), per-segment audio export, import/export |
 
 ---
 
@@ -542,7 +542,7 @@ Your support helps keep this project maintained and free for everyone.
 ## Documentation
 
 - **[Installation Guide](docs/INSTALLATION.md)** — Detailed setup for Windows, macOS, Linux
-- **[Tool Reference](docs/TOOLS.md)** — Complete reference for all 143 tools with parameters and ranges
+- **[Tool Reference](docs/TOOLS.md)** — Complete reference for all 144 tools with parameters and ranges
 - **[Contributing](CONTRIBUTING.md)** — How to add tools and contribute
 - **[Changelog](CHANGELOG.md)** — Version history and release notes
 

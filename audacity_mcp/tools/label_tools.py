@@ -496,12 +496,63 @@ def register(mcp: FastMCP):
         }
 
     @mcp.tool()
+    async def label_delete_region(index: int, close_gap: bool = True) -> dict:
+        """Delete the audio under ONE label — label_delete_regions for a single label.
+
+        By default the gap closes and everything after shifts left, exactly as
+        label_delete_regions does. Pass close_gap=False to leave silence of the
+        same length instead, keeping the timeline length and everything after it
+        in place.
+
+        All tracks are selected first, so label tracks ripple along with the
+        audio and later labels stay aligned with it. With close_gap=True the
+        target label collapses and usually disappears along with its audio; with
+        close_gap=False it stays. Use label_delete instead to remove a label
+        without touching any audio.
+
+        Args:
+            index: Flat label index from label_list
+            close_gap: Close the gap and shift later audio left. Default: True
+        """
+        if index < 0:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "index must be >= 0")
+
+        labels = await get_parsed_labels(client)
+        if index >= len(labels):
+            raise AudacityMCPError(
+                ErrorCode.VALUE_OUT_OF_RANGE,
+                f"No label at index {index} — project has {len(labels)} label(s)")
+
+        target = labels[index]
+        if target["end"] <= target["start"]:
+            raise AudacityMCPError(
+                ErrorCode.VALIDATION_FAILED,
+                f"Label {index} is a point label with no audio under it. Give it a "
+                "start and end time first, or use label_delete to remove the marker.")
+
+        await client.execute("SelAllTracks")
+        await client.execute("SelectTime", Start=target["start"], End=target["end"])
+        result = await client.execute_long("Delete" if close_gap else "SplitDelete")
+
+        remaining = await get_parsed_labels(client)
+        return {
+            "success": result.get("success", False),
+            "index": index,
+            "deleted": {"start": target["start"], "end": target["end"], "text": target["text"]},
+            "closed_gap": close_gap,
+            "duration_removed": round(target["end"] - target["start"], 6),
+            "count_before": len(labels),
+            "count_after": len(remaining),
+        }
+
+    @mcp.tool()
     async def label_cut_regions() -> dict:
         """Cut the audio under every label to the clipboard, closing the gaps.
 
         Acts on labeled regions within the current selection on the SELECTED
-        AUDIO TRACKS — select the audio tracks and time range first. The labels
-        themselves stay where they are.
+        AUDIO TRACKS — select the audio tracks and time range first. Because the
+        timeline closes up, the labeled regions collapse rather than surviving
+        unchanged — re-read label_list afterwards to see what remains.
         """
         return await client.execute_long("CutLabels")
 
@@ -510,9 +561,11 @@ def register(mcp: FastMCP):
         """Delete the audio under every label, closing the gaps.
 
         Label every unwanted stretch — bad takes, dead air, noise bursts — then
-        remove them all in one pass. Acts on labeled regions within the current
-        selection on the SELECTED AUDIO TRACKS — select the audio tracks and
-        time range first. The labels themselves stay where they are.
+        remove them all in one pass. Use label_delete_region for a single label.
+        Acts on labeled regions within the current selection on the SELECTED
+        AUDIO TRACKS — select the audio tracks and time range first. Because the
+        timeline closes up, the labeled regions collapse rather than surviving
+        unchanged — re-read label_list afterwards to see what remains.
         """
         return await client.execute_long("DeleteLabels")
 

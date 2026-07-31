@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete reference for all 143 tools in AudacityMCP.
+Complete reference for all 144 tools in AudacityMCP.
 
 ---
 
@@ -16,7 +16,7 @@ Complete reference for all 143 tools in AudacityMCP.
 - [Analysis (6 tools)](#analysis)
 - [Generation (5 tools)](#generation)
 - [Transcription — Experimental (7 tools)](#transcription--experimental)
-- [Labels (18 tools)](#labels)
+- [Labels (19 tools)](#labels)
 
 ---
 
@@ -971,6 +971,19 @@ Deletes one label without touching the audio. Audacity has no scripting command 
 
 Adds a whole marker list in one call. `end` defaults to `start` (point label), `text` defaults to empty. Every item is validated before anything is sent, so a bad item fails the whole call instead of leaving a half-written list behind.
 
+### `label_delete_region`
+
+Deletes the audio under **one** label — `label_delete_regions` scoped to a single label.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `index` | int | — | Flat label index from `label_list` |
+| `close_gap` | bool | True | Close the gap and shift later audio left |
+
+`close_gap=True` ripples: the gap closes and everything after shifts left. `close_gap=False` leaves silence of the same length, preserving the timeline. All tracks are selected first, so label tracks ripple along with the audio and later labels stay aligned with it — with `close_gap=True` the target label collapses and usually disappears along with its audio.
+
+Point labels have no audio underneath and are rejected. Use `label_delete` to remove a label without touching audio at all.
+
 ### Labeled-region audio edits
 
 | Tool | Audacity command | Effect |
@@ -981,7 +994,9 @@ Adds a whole marker list in one call. `end` defaults to `start` (point label), `
 | `label_split_regions` | `SplitLabels` | Split clips at label boundaries |
 | `label_join_regions` | `JoinLabels` | Rejoin clips across labeled regions |
 
-**All five act on labeled regions within the current selection on the SELECTED AUDIO TRACKS** — select the audio tracks and time range first (`select_all` for the whole project). The labels themselves are not removed.
+**All five act on labeled regions within the current selection on the SELECTED AUDIO TRACKS** — select the audio tracks and time range first (`select_all` for the whole project).
+
+For `label_silence_regions`, `label_split_regions` and `label_join_regions` the timeline length is unchanged and the labels stay where they are. For `label_cut_regions` and `label_delete_regions` the timeline closes up, so the labeled regions collapse rather than surviving unchanged — re-read `label_list` afterwards to see what remains.
 
 Typical cleanup: label every bad take or dead-air stretch, then `label_delete_regions` to remove them in one pass. Typical redaction: label the section, then `label_silence_regions` so the material does not get shorter and stays in sync.
 
