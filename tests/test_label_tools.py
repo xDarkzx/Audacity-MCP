@@ -388,10 +388,46 @@ class TestLabelDeleteRegion:
         assert _calls_for(client, "SelectTracks") == []
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_leaves_label_alone_when_it_no_longer_matches(self):
-        # If the label sitting at this index after the audio delete isn't the
-        # one we cut, deleting blind would take out the wrong label.
-        reorganised = '[["Label Track", [[0.0, 10.0, "Intro"], [99.0, 120.0, "Something else"]]]]'
+    async def test_finds_the_leftover_even_when_its_index_shifted(self):
+        # An earlier label vanishing shifts the leftover marker to a different
+        # index. Looking it up by its original index would clear the wrong
+        # label or give up; finding it by identity gets the right one.
+        shifted = '[["Label Track", [[10.0, 10.0, "Interview"]]]]'
+        client = MagicMock()
+        state = {"audio_deleted": False, "label_deleted": False}
+
+        async def _execute(command, *args, **kwargs):
+            if command == "Delete":
+                state["audio_deleted"] = True
+            if command == "SplitDelete":
+                state["label_deleted"] = True
+            if command == "GetInfo":
+                if kwargs.get("Type") == "Tracks":
+                    return {"success": True, "raw": "", "message": ONE_WAVE_ONE_LABEL_TRACK, "data": {}}
+                if state["label_deleted"]:
+                    message = "[]"
+                elif state["audio_deleted"]:
+                    message = shifted
+                else:
+                    message = TWO_LABELS
+                return {"success": True, "raw": "", "message": message, "data": {}}
+            return {"success": True, "raw": "", "message": "", "data": {}}
+
+        client.execute = AsyncMock(side_effect=_execute)
+        client.execute_long = AsyncMock(side_effect=_execute)
+
+        from audacity_mcp.tools.label_tools import POINT_LABEL_EPSILON
+        result = await _register(client)["label_delete_region"].fn(index=1)
+
+        assert result["label_removed"] is True
+        # The leftover moved from index 1 to index 0, and that's what got cleared.
+        assert _calls_for(client, "SelectTime")[-1].kwargs == {
+            "Start": 10.0 - POINT_LABEL_EPSILON, "End": 10.0 + POINT_LABEL_EPSILON}
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_label_already_gone_counts_as_removed(self):
+        # Some Audacity versions may drop the label with its audio. That's the
+        # end state we wanted, so it's a success, not a warning.
         client = MagicMock()
         state = {"audio_deleted": False}
 
@@ -400,9 +436,8 @@ class TestLabelDeleteRegion:
                 state["audio_deleted"] = True
             if command == "GetInfo":
                 if kwargs.get("Type") == "Tracks":
-                    message = ONE_WAVE_ONE_LABEL_TRACK
-                else:
-                    message = reorganised if state["audio_deleted"] else TWO_LABELS
+                    return {"success": True, "raw": "", "message": ONE_WAVE_ONE_LABEL_TRACK, "data": {}}
+                message = '[["Label Track", [[0.0, 10.0, "Intro"]]]]' if state["audio_deleted"] else TWO_LABELS
                 return {"success": True, "raw": "", "message": message, "data": {}}
             return {"success": True, "raw": "", "message": "", "data": {}}
 
@@ -411,9 +446,10 @@ class TestLabelDeleteRegion:
 
         result = await _register(client)["label_delete_region"].fn(index=1)
 
-        assert result["label_removed"] is False
-        assert "no longer matches" in result["label_note"]
-        assert _calls_for(client, "SelectTracks") == []
+        assert result["label_removed"] is True
+        assert "label_note" not in result
+        # Nothing left to clear, so no second delete pass was issued.
+        assert "SplitDelete" not in _commands(client)
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_point_label_has_no_audio_to_delete(self):

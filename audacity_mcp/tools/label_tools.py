@@ -21,6 +21,22 @@ MAX_EXPORT_SEGMENTS = 100
 _LEFTOVER_START_TOLERANCE = 0.01
 
 
+def find_leftover_label(labels: list[dict], target: dict) -> int | None:
+    """Index of the marker left behind where target's audio was, or None if gone.
+
+    Deleting a label's audio does not delete the label - it collapses to a
+    zero-length marker at the start of the cut. Finding it by text plus that
+    position works even when the delete shifted other labels around; looking it
+    up by its original index only works if nothing moved, which is exactly the
+    case that needs handling.
+    """
+    for label in labels:
+        if (label["text"] == target["text"]
+                and abs(label["start"] - target["start"]) <= _LEFTOVER_START_TOLERANCE):
+            return label["index"]
+    return None
+
+
 def _is_label_leaf(node) -> bool:
     """True if node is a [start, end, text] triple as GetInfo reports labels."""
     return (isinstance(node, list) and len(node) == 3
@@ -531,9 +547,9 @@ def register(mcp: FastMCP):
         Deleting the audio does NOT remove the label — it collapses to a
         zero-length marker sitting where the audio used to be. This tool clears
         that leftover marker too, matching what clicking a label and pressing
-        Delete does in Audacity. Pass delete_label=False to keep it as a marker
-        of where the cut was made. Use label_delete instead to remove a label
-        without touching any audio.
+        Delete does in Audacity: the audio and the label both go. Pass
+        delete_label=False to keep it as a marker of where the cut was made.
+        Use label_delete instead to remove a label without touching any audio.
 
         Args:
             index: Flat label index from label_list
@@ -563,21 +579,16 @@ def register(mcp: FastMCP):
         label_removed = False
         label_note = None
         if delete_label:
-            after_audio = await get_parsed_labels(client)
-            leftover = after_audio[index] if index < len(after_audio) else None
-            # Only clear it if the label still at this index really is the one
-            # we just cut - matching text and an unmoved start. Anything else
-            # means Audacity reorganised the track, and deleting blind would
-            # take out the wrong label.
-            if (leftover is not None and leftover["text"] == target["text"]
-                    and abs(leftover["start"] - target["start"]) <= _LEFTOVER_START_TOLERANCE):
-                removal = await remove_label(client, index)
+            leftover_index = find_leftover_label(await get_parsed_labels(client), target)
+            if leftover_index is None:
+                # Nothing left to clear - this Audacity dropped the label along
+                # with its audio, which is the end state we were after anyway.
+                label_removed = True
+            else:
+                removal = await remove_label(client, leftover_index)
                 label_removed = bool(removal.get("success"))
                 if not label_removed:
                     label_note = removal.get("message")
-            else:
-                label_note = ("Left the label alone — the label at this index no longer "
-                              "matches the one whose audio was deleted. Check label_list.")
 
         remaining = await get_parsed_labels(client)
         return {

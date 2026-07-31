@@ -985,7 +985,7 @@ Deletes the audio under **one** label — `label_delete_regions` scoped to a sin
 
 **Deleting the audio does not remove the label** — it collapses to a zero-length marker sitting where the audio used to be. `delete_label=True` (the default) clears that leftover, matching what clicking a label and pressing <kbd>Delete</kbd> does in Audacity. Pass `delete_label=False` to keep it as a marker of where the cut was made.
 
-The cleanup only fires if the label still at that index matches the one whose audio was deleted (same text, unmoved start). If it doesn't, the label is left alone and a `label_note` explains why, rather than risking deleting the wrong one.
+The leftover is located by identity — matching text at the start of the cut — not by its original index, so it is still found when the delete shifts other labels around. If no leftover is found at all, this Audacity dropped the label along with its audio, which is the same end state, and the call reports `label_removed: true`.
 
 Point labels have no audio underneath and are rejected. Use `label_delete` to remove a label without touching audio at all.
 
