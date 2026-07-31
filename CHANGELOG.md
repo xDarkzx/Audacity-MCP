@@ -37,7 +37,11 @@ Note on the wording for the region tools: `label_silence_regions`, `label_split_
 
 - **Worth a look while smoke-testing:** the three pre-existing parameters are sent as `Threshold`/`MinSilence`/`MinSound`, but the scripting reference documents `LabelSounds` as taking `threshold`/`sil-dur`/`snd-dur`. If the documented names are the real ones, the two duration parameters have never reached Audacity and it has been silently using its own defaults. Left alone here rather than changed blind — correcting a working call on a guess is the worse failure mode, and this belongs in its own fix once someone can confirm against a running Audacity.
 
-**Testing.** `tests/test_label_tools.py` grew from 8 to 62 tests; suite total 92 → 150. Covers the parser across both `GetInfo` schemas, per-tool validation, exact command sequences for `label_delete` (including the point-label epsilon region and the collateral re-add), the chapter formatters as pure functions, and the export tools against `tmp_path`.
+Deleting a label is region-based — Audacity has no "delete label N" command, so the label's own span is selected and split-deleted. That leaves zero-width point labels with nothing to select, so they are given a width via `SetLabel` first and then deleted like any other label, rather than trying to make a region delete catch something with no width. This matters most for `label_delete_region`'s cleanup, whose target is always a freshly collapsed label.
+
+When a removal does fail, the payload carries Audacity's own reply to each command (`success`, `message`, `raw`) under `audacity_responses`, plus the region selected and whether the target was widened. The tool states what it observed — the label count did not drop — and leaves the diagnosis to Audacity's output rather than guessing at causes.
+
+**Testing.** `tests/test_label_tools.py` grew from 8 to 71 tests; suite total 92 → 161. Covers the parser across both `GetInfo` schemas, per-tool validation, exact command sequences for `label_delete` (including point-label widening and the collateral re-add), the chapter formatters as pure functions, and the export tools against `tmp_path`.
 
 - **Not independently tested against a live Audacity instance** — no running Audacity was available, so `label_delete`'s `SplitDelete`-on-a-label-track behavior and the new `LabelSounds` parameter names are verified against the scripting reference and unit tests with mocked responses, not observed. Same caveat as 0.1.13; please smoke-test both before considering this closed.
 

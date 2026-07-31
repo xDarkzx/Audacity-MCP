@@ -9,9 +9,10 @@ from audacity_mcp_shared.constants import (
     MAX_LABEL_LENGTH,
 )
 
-# A point label has zero width, so there is no region to select for deletion.
-# SplitDelete needs a non-empty span, hence a hair either side.
-POINT_LABEL_EPSILON = 0.001
+# Width given to a zero-width label so it can be selected and deleted like any
+# other. Deleting is region-based, so a label with no width has nothing to
+# select - widening it first sidesteps that entirely.
+POINT_LABEL_WIDTH = 0.01
 
 MAX_BATCH_LABELS = 500
 MAX_EXPORT_SEGMENTS = 100
@@ -185,11 +186,16 @@ async def remove_label(client, index: int) -> dict:
             "to rewrite the label track.")
     absolute_track = label_tracks[target["track"]]
 
-    if target["end"] > target["start"]:
-        region_start, region_end = target["start"], target["end"]
+    widened = target["end"] <= target["start"]
+    if widened:
+        # Nothing to select on a zero-width label, and a region delete can't
+        # remove what has no width. Give it one first, then it deletes like
+        # anything else - the label is on its way out either way.
+        region_start = target["start"]
+        region_end = target["start"] + POINT_LABEL_WIDTH
+        await client.execute("SetLabel", Label=index, Start=region_start, End=region_end)
     else:
-        region_start = max(0.0, target["start"] - POINT_LABEL_EPSILON)
-        region_end = target["start"] + POINT_LABEL_EPSILON
+        region_start, region_end = target["start"], target["end"]
 
     collateral = [label for label in labels
                   if label["track"] == target["track"]
@@ -213,7 +219,8 @@ async def remove_label(client, index: int) -> dict:
             "index": index,
             "count_before": len(labels),
             "count_after": len(remaining),
-            "target_was_point_label": target["end"] <= target["start"],
+            "target_was_point_label": widened,
+            "widened_before_delete": widened,
             "selected_region": {"start": region_start, "end": region_end},
             "selected_track": absolute_track,
             "audacity_responses": {

@@ -416,13 +416,16 @@ class TestLabelDeleteRegion:
         client.execute = AsyncMock(side_effect=_execute)
         client.execute_long = AsyncMock(side_effect=_execute)
 
-        from audacity_mcp.tools.label_tools import POINT_LABEL_EPSILON
+        from audacity_mcp.tools.label_tools import POINT_LABEL_WIDTH
         result = await _register(client)["label_delete_region"].fn(index=1)
 
         assert result["label_removed"] is True
-        # The leftover moved from index 1 to index 0, and that's what got cleared.
+        # The leftover moved from index 1 to index 0, and that's what got
+        # widened and cleared.
+        assert _calls_for(client, "SetLabel")[-1].kwargs == {
+            "Label": 0, "Start": 10.0, "End": 10.0 + POINT_LABEL_WIDTH}
         assert _calls_for(client, "SelectTime")[-1].kwargs == {
-            "Start": 10.0 - POINT_LABEL_EPSILON, "End": 10.0 + POINT_LABEL_EPSILON}
+            "Start": 10.0, "End": 10.0 + POINT_LABEL_WIDTH}
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_label_already_gone_counts_as_removed(self):
@@ -635,14 +638,27 @@ class TestLabelDelete:
         assert "SplitDelete" in _commands(client)
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_point_label_gets_an_epsilon_region(self):
-        from audacity_mcp.tools.label_tools import POINT_LABEL_EPSILON
+    async def test_point_label_is_widened_before_deleting(self):
+        # A zero-width label has no region to select, so it gets a width via
+        # SetLabel first and is then deleted like any other label.
+        from audacity_mcp.tools.label_tools import POINT_LABEL_WIDTH
         before = '[["Label Track", [[5.0, 5.0, "cue"], [9.0, 9.0, "other"]]]]'
         after = '[["Label Track", [[9.0, 9.0, "other"]]]]'
         client = _delete_client(before, after)
         await _register(client)["label_delete"].fn(index=0)
+
+        assert _calls_for(client, "SetLabel")[0].kwargs == {
+            "Label": 0, "Start": 5.0, "End": 5.0 + POINT_LABEL_WIDTH}
         assert _calls_for(client, "SelectTime")[0].kwargs == {
-            "Start": 5.0 - POINT_LABEL_EPSILON, "End": 5.0 + POINT_LABEL_EPSILON}
+            "Start": 5.0, "End": 5.0 + POINT_LABEL_WIDTH}
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_label_with_width_is_not_widened(self):
+        after = '[["Label Track", [[0.0, 10.0, "Intro"]]]]'
+        client = _delete_client(TWO_LABELS, after)
+        await _register(client)["label_delete"].fn(index=1)
+        assert _calls_for(client, "SetLabel") == []
+        assert _calls_for(client, "SelectTime")[0].kwargs == {"Start": 10.0, "End": 60.0}
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_label_swallowed_by_the_region_is_re_added(self):
