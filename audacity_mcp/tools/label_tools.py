@@ -16,6 +16,10 @@ POINT_LABEL_EPSILON = 0.001
 MAX_BATCH_LABELS = 500
 MAX_EXPORT_SEGMENTS = 100
 
+# How far a leftover label's start may drift and still be recognised as the
+# one whose audio was just deleted, rather than a different label.
+_LEFTOVER_START_TOLERANCE = 0.01
+
 
 def _is_label_leaf(node) -> bool:
     """True if node is a [start, end, text] triple as GetInfo reports labels."""
@@ -127,6 +131,78 @@ async def add_labels_at(client, labels: list[dict]) -> int:
         if text:
             await client.execute("SetLabel", Label=base + offset, Text=text)
     return base
+
+
+async def remove_label(client, index: int) -> dict:
+    """Remove one label by flat index, leaving all audio untouched.
+
+    Audacity has no scripting command for deleting a single label, so this
+    selects the label's own span on its own label track and split-deletes it.
+    Audio tracks are never in the selection, so nothing downstream shifts.
+    Shared by label_delete and by label_delete_region's cleanup step.
+    """
+    if index < 0:
+        raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "index must be >= 0")
+
+    labels = await get_parsed_labels(client)
+    if index >= len(labels):
+        raise AudacityMCPError(
+            ErrorCode.VALUE_OUT_OF_RANGE,
+            f"No label at index {index} — project has {len(labels)} label(s)")
+
+    target = labels[index]
+    label_tracks = await get_label_track_indices(client)
+    if target["track"] is None or target["track"] >= len(label_tracks):
+        raise AudacityMCPError(
+            ErrorCode.COMMAND_FAILED,
+            "Could not work out which track this label belongs to. "
+            "Delete it directly in Audacity, or use label_export/label_import "
+            "to rewrite the label track.")
+    absolute_track = label_tracks[target["track"]]
+
+    if target["end"] > target["start"]:
+        region_start, region_end = target["start"], target["end"]
+    else:
+        region_start = max(0.0, target["start"] - POINT_LABEL_EPSILON)
+        region_end = target["start"] + POINT_LABEL_EPSILON
+
+    collateral = [label for label in labels
+                  if label["track"] == target["track"]
+                  and label["index"] != index
+                  and region_start <= label["start"] and label["end"] <= region_end]
+
+    await client.execute("SelectTracks", Track=absolute_track, TrackCount=1, Mode="Set")
+    await client.execute("SelectTime", Start=region_start, End=region_end)
+    await client.execute("SplitDelete")
+
+    remaining = await get_parsed_labels(client)
+    if len(remaining) >= len(labels):
+        return {
+            "success": False,
+            "message": ("Audacity did not remove the label — nothing was deleted. "
+                        "The label track may be locked, or this Audacity version may "
+                        "not support SplitDelete on label tracks."),
+            "index": index,
+            "count_before": len(labels),
+            "count_after": len(remaining),
+        }
+
+    restored = 0
+    if collateral:
+        await add_labels_at(client, [
+            {"start": label["start"], "end": label["end"], "text": label["text"]}
+            for label in collateral
+        ])
+        restored = len(collateral)
+
+    return {
+        "success": True,
+        "index": index,
+        "deleted": {"start": target["start"], "end": target["end"], "text": target["text"]},
+        "restored": restored,
+        "count_before": len(labels),
+        "count_after": len(remaining) + restored,
+    }
 
 
 def format_chapter_timestamp(seconds: float) -> str:
@@ -429,74 +505,19 @@ def register(mcp: FastMCP):
         trimmed to the boundary; check label_list afterwards if labels on that
         track overlap each other.
 
+        To delete a label *and* the audio under it, use label_delete_region.
+
         Args:
             index: Flat label index from label_list
         """
-        if index < 0:
-            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "index must be >= 0")
-
-        labels = await get_parsed_labels(client)
-        if index >= len(labels):
-            raise AudacityMCPError(
-                ErrorCode.VALUE_OUT_OF_RANGE,
-                f"No label at index {index} — project has {len(labels)} label(s)")
-
-        target = labels[index]
-        label_tracks = await get_label_track_indices(client)
-        if target["track"] is None or target["track"] >= len(label_tracks):
-            raise AudacityMCPError(
-                ErrorCode.COMMAND_FAILED,
-                "Could not work out which track this label belongs to. "
-                "Delete it directly in Audacity, or use label_export/label_import "
-                "to rewrite the label track.")
-        absolute_track = label_tracks[target["track"]]
-
-        if target["end"] > target["start"]:
-            region_start, region_end = target["start"], target["end"]
-        else:
-            region_start = max(0.0, target["start"] - POINT_LABEL_EPSILON)
-            region_end = target["start"] + POINT_LABEL_EPSILON
-
-        collateral = [label for label in labels
-                      if label["track"] == target["track"]
-                      and label["index"] != index
-                      and region_start <= label["start"] and label["end"] <= region_end]
-
-        await client.execute("SelectTracks", Track=absolute_track, TrackCount=1, Mode="Set")
-        await client.execute("SelectTime", Start=region_start, End=region_end)
-        await client.execute("SplitDelete")
-
-        remaining = await get_parsed_labels(client)
-        if len(remaining) >= len(labels):
-            return {
-                "success": False,
-                "message": ("Audacity did not remove the label — nothing was deleted. "
-                            "The label track may be locked, or this Audacity version may "
-                            "not support SplitDelete on label tracks."),
-                "index": index,
-                "count_before": len(labels),
-                "count_after": len(remaining),
-            }
-
-        restored = 0
-        if collateral:
-            await add_labels_at(client, [
-                {"start": label["start"], "end": label["end"], "text": label["text"]}
-                for label in collateral
-            ])
-            restored = len(collateral)
-
-        return {
-            "success": True,
-            "index": index,
-            "deleted": {"start": target["start"], "end": target["end"], "text": target["text"]},
-            "restored": restored,
-            "count_before": len(labels),
-            "count_after": len(remaining) + restored,
-        }
+        return await remove_label(client, index)
 
     @mcp.tool()
-    async def label_delete_region(index: int, close_gap: bool = True) -> dict:
+    async def label_delete_region(
+        index: int,
+        close_gap: bool = True,
+        delete_label: bool = True,
+    ) -> dict:
         """Delete the audio under ONE label — label_delete_regions for a single label.
 
         By default the gap closes and everything after shifts left, exactly as
@@ -505,14 +526,19 @@ def register(mcp: FastMCP):
         in place.
 
         All tracks are selected first, so label tracks ripple along with the
-        audio and later labels stay aligned with it. With close_gap=True the
-        target label collapses and usually disappears along with its audio; with
-        close_gap=False it stays. Use label_delete instead to remove a label
+        audio and later labels stay aligned with it.
+
+        Deleting the audio does NOT remove the label — it collapses to a
+        zero-length marker sitting where the audio used to be. This tool clears
+        that leftover marker too, matching what clicking a label and pressing
+        Delete does in Audacity. Pass delete_label=False to keep it as a marker
+        of where the cut was made. Use label_delete instead to remove a label
         without touching any audio.
 
         Args:
             index: Flat label index from label_list
             close_gap: Close the gap and shift later audio left. Default: True
+            delete_label: Also remove the label left behind. Default: True
         """
         if index < 0:
             raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "index must be >= 0")
@@ -534,15 +560,36 @@ def register(mcp: FastMCP):
         await client.execute("SelectTime", Start=target["start"], End=target["end"])
         result = await client.execute_long("Delete" if close_gap else "SplitDelete")
 
+        label_removed = False
+        label_note = None
+        if delete_label:
+            after_audio = await get_parsed_labels(client)
+            leftover = after_audio[index] if index < len(after_audio) else None
+            # Only clear it if the label still at this index really is the one
+            # we just cut - matching text and an unmoved start. Anything else
+            # means Audacity reorganised the track, and deleting blind would
+            # take out the wrong label.
+            if (leftover is not None and leftover["text"] == target["text"]
+                    and abs(leftover["start"] - target["start"]) <= _LEFTOVER_START_TOLERANCE):
+                removal = await remove_label(client, index)
+                label_removed = bool(removal.get("success"))
+                if not label_removed:
+                    label_note = removal.get("message")
+            else:
+                label_note = ("Left the label alone — the label at this index no longer "
+                              "matches the one whose audio was deleted. Check label_list.")
+
         remaining = await get_parsed_labels(client)
         return {
             "success": result.get("success", False),
             "index": index,
             "deleted": {"start": target["start"], "end": target["end"], "text": target["text"]},
             "closed_gap": close_gap,
+            "label_removed": label_removed,
             "duration_removed": round(target["end"] - target["start"], 6),
             "count_before": len(labels),
             "count_after": len(remaining),
+            **({"label_note": label_note} if label_note else {}),
         }
 
     @mcp.tool()

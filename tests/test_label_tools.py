@@ -320,7 +320,7 @@ class TestLabelDeleteRegion:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_closes_the_gap_by_default(self):
         client = _mock_client(TWO_LABELS)
-        result = await _register(client)["label_delete_region"].fn(index=1)
+        result = await _register(client)["label_delete_region"].fn(index=1, delete_label=False)
 
         # All tracks first so label tracks ripple with the audio, then the
         # label's own span, then a gap-closing Delete.
@@ -335,9 +335,85 @@ class TestLabelDeleteRegion:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_close_gap_false_uses_split_delete(self):
         client = _mock_client(TWO_LABELS)
-        result = await _register(client)["label_delete_region"].fn(index=0, close_gap=False)
+        result = await _register(client)["label_delete_region"].fn(
+            index=0, close_gap=False, delete_label=False)
         assert [c.args[0] for c in client.execute_long.call_args_list] == ["SplitDelete"]
         assert result["closed_gap"] is False
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_clears_the_zero_length_label_left_behind(self):
+        # Deleting the audio collapses the label to a point rather than
+        # removing it; the tool has to clear that leftover to match what
+        # clicking a label and pressing Delete does in Audacity.
+        collapsed = '[["Label Track", [[0.0, 10.0, "Intro"], [10.0, 10.0, "Interview"]]]]'
+        gone = '[["Label Track", [[0.0, 10.0, "Intro"]]]]'
+        client = MagicMock()
+        state = {"audio_deleted": False, "label_deleted": False}
+
+        async def _execute(command, *args, **kwargs):
+            if command == "Delete":
+                state["audio_deleted"] = True
+            if command == "SplitDelete":
+                state["label_deleted"] = True
+            if command == "GetInfo":
+                if kwargs.get("Type") == "Tracks":
+                    return {"success": True, "raw": "", "message": ONE_WAVE_ONE_LABEL_TRACK, "data": {}}
+                if state["label_deleted"]:
+                    message = gone
+                elif state["audio_deleted"]:
+                    message = collapsed
+                else:
+                    message = TWO_LABELS
+                return {"success": True, "raw": "", "message": message, "data": {}}
+            return {"success": True, "raw": "", "message": "", "data": {}}
+
+        client.execute = AsyncMock(side_effect=_execute)
+        client.execute_long = AsyncMock(side_effect=_execute)
+
+        result = await _register(client)["label_delete_region"].fn(index=1)
+
+        assert result["label_removed"] is True
+        assert result["count_after"] == 1
+        # Audio first via Delete, then the leftover marker via SplitDelete on
+        # the label track alone.
+        assert "Delete" in [c.args[0] for c in client.execute_long.call_args_list]
+        assert "SplitDelete" in _commands(client)
+        assert _calls_for(client, "SelectTracks")[0].kwargs["Track"] == 1
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_delete_label_false_keeps_the_marker(self):
+        client = _mock_client(TWO_LABELS)
+        result = await _register(client)["label_delete_region"].fn(index=1, delete_label=False)
+        assert result["label_removed"] is False
+        assert _calls_for(client, "SelectTracks") == []
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_leaves_label_alone_when_it_no_longer_matches(self):
+        # If the label sitting at this index after the audio delete isn't the
+        # one we cut, deleting blind would take out the wrong label.
+        reorganised = '[["Label Track", [[0.0, 10.0, "Intro"], [99.0, 120.0, "Something else"]]]]'
+        client = MagicMock()
+        state = {"audio_deleted": False}
+
+        async def _execute(command, *args, **kwargs):
+            if command == "Delete":
+                state["audio_deleted"] = True
+            if command == "GetInfo":
+                if kwargs.get("Type") == "Tracks":
+                    message = ONE_WAVE_ONE_LABEL_TRACK
+                else:
+                    message = reorganised if state["audio_deleted"] else TWO_LABELS
+                return {"success": True, "raw": "", "message": message, "data": {}}
+            return {"success": True, "raw": "", "message": "", "data": {}}
+
+        client.execute = AsyncMock(side_effect=_execute)
+        client.execute_long = AsyncMock(side_effect=_execute)
+
+        result = await _register(client)["label_delete_region"].fn(index=1)
+
+        assert result["label_removed"] is False
+        assert "no longer matches" in result["label_note"]
+        assert _calls_for(client, "SelectTracks") == []
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_point_label_has_no_audio_to_delete(self):

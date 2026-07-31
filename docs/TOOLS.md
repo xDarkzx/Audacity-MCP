@@ -979,8 +979,13 @@ Deletes the audio under **one** label — `label_delete_regions` scoped to a sin
 |-----------|------|---------|-------------|
 | `index` | int | — | Flat label index from `label_list` |
 | `close_gap` | bool | True | Close the gap and shift later audio left |
+| `delete_label` | bool | True | Also remove the label left behind |
 
-`close_gap=True` ripples: the gap closes and everything after shifts left. `close_gap=False` leaves silence of the same length, preserving the timeline. All tracks are selected first, so label tracks ripple along with the audio and later labels stay aligned with it — with `close_gap=True` the target label collapses and usually disappears along with its audio.
+`close_gap=True` ripples: the gap closes and everything after shifts left. `close_gap=False` leaves silence of the same length, preserving the timeline. All tracks are selected first, so label tracks ripple along with the audio and later labels stay aligned with it.
+
+**Deleting the audio does not remove the label** — it collapses to a zero-length marker sitting where the audio used to be. `delete_label=True` (the default) clears that leftover, matching what clicking a label and pressing <kbd>Delete</kbd> does in Audacity. Pass `delete_label=False` to keep it as a marker of where the cut was made.
+
+The cleanup only fires if the label still at that index matches the one whose audio was deleted (same text, unmoved start). If it doesn't, the label is left alone and a `label_note` explains why, rather than risking deleting the wrong one.
 
 Point labels have no audio underneath and are rejected. Use `label_delete` to remove a label without touching audio at all.
 
