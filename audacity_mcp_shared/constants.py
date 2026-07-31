@@ -96,6 +96,11 @@ ALLOWED_SAMPLE_RATES = {8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 9
 MAX_TRACKS = 500
 MAX_LABEL_LENGTH = 1000
 
+CHAPTER_FORMATS = {"simple", "cue", "podlove"}
+
+LABEL_SOUNDS_MEASUREMENTS = {"peak", "avg", "rms"}
+LABEL_SOUNDS_TYPES = {"before", "after", "around", "between"}
+
 WHISPER_MODEL_SIZES = {"tiny", "base", "small", "medium", "large-v3"}
 TRANSCRIPTION_TASKS = {"transcribe", "translate"}
 SUBTITLE_FORMATS = {"srt", "vtt", "txt"}

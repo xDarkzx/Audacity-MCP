@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete reference for all 131 tools in AudacityMCP.
+Complete reference for all 143 tools in AudacityMCP.
 
 ---
 
@@ -16,7 +16,7 @@ Complete reference for all 131 tools in AudacityMCP.
 - [Analysis (6 tools)](#analysis)
 - [Generation (5 tools)](#generation)
 - [Transcription — Experimental (7 tools)](#transcription--experimental)
-- [Labels (6 tools)](#labels)
+- [Labels (18 tools)](#labels)
 
 ---
 
@@ -761,11 +761,20 @@ Adds labels at detected beat positions.
 
 ### `analyze_label_sounds`
 
+Labels regions of sound separated by silence — a good starting point for segmenting a long recording.
+
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `threshold_db` | float | -30.0 | Sound/silence threshold |
-| `min_silence_duration` | float | 0.5 | Min silence gap (s) |
-| `min_sound_duration` | float | 0.1 | Min sound length (s) |
+| `min_silence_duration` | float | 0.5 | Min silence gap (s, >= 0; 0 = no minimum) |
+| `min_sound_duration` | float | 0.1 | Min sound length (s, >= 0; 0 = no minimum) |
+| `measurement` | str | "peak" | Level measurement: `peak`, `avg`, `rms` |
+| `label_type` | str | "before" | What to label: `before`, `after`, `around`, `between` |
+| `pre_offset` | float | 0.0 | Extend each label before the sound (s, 0-3600) |
+| `post_offset` | float | 0.0 | Extend each label after the sound (s, 0-3600) |
+| `label_text` | str | "Sound" | Text for each label |
+
+Use `label_type="between"` to label the silences instead of the sounds, then remove them with `label_delete_regions`.
 
 ### `analyze_sample_data_export`
 
@@ -917,7 +926,83 @@ Create labels at regular time intervals across the selection or project.
 | `label_text` | str | "" | Text for each label |
 
 ### `label_get_all`
-Get all labels in the project.
+Get all labels as Audacity's raw `GetInfo` response. Prefer `label_list`.
+
+### `label_list`
+
+Every label with its index, timing and text, already parsed. The `index` it returns is what `label_edit` and `label_delete` take — call this first rather than guessing an index.
+
+Returns `{"success", "count", "labels": [{"index", "start", "end", "text", "track"}]}`.
+
+### `label_find`
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `query` | str | Text to search for (case-insensitive, must not be empty) |
+
+Finds labels whose text contains `query` — locating a specific marker in a long recording without reading through every label.
+
+### `label_edit`
+
+Edit an existing label. Only the fields you pass are changed.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `index` | int | — | Flat label index from `label_list` |
+| `text` | str \| None | None | New label text |
+| `start` | float \| None | None | New start time (s) |
+| `end` | float \| None | None | New end time (s) |
+
+Returns `{"success", "index", "before", "after"}`.
+
+### `label_delete`
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `index` | int | Flat label index from `label_list` |
+
+Deletes one label without touching the audio. Audacity has no scripting command for this, so the tool selects the label's own span on its own label track and split-deletes it — audio tracks are never in the selection and nothing shifts in time. Labels on the same track that sit entirely inside the deleted span are re-added afterwards (reported as `restored`). A label that only partially overlaps may be trimmed to the boundary. If Audacity removes nothing, the tool returns `success: false` rather than claiming a delete that did not happen.
+
+### `label_add_batch`
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `labels` | list[dict] | `{"start", "end"?, "text"?}` items, max 500 |
+
+Adds a whole marker list in one call. `end` defaults to `start` (point label), `text` defaults to empty. Every item is validated before anything is sent, so a bad item fails the whole call instead of leaving a half-written list behind.
+
+### Labeled-region audio edits
+
+| Tool | Audacity command | Effect |
+|------|------------------|--------|
+| `label_cut_regions` | `CutLabels` | Cut labeled audio to the clipboard, closing gaps |
+| `label_delete_regions` | `DeleteLabels` | Delete labeled audio, closing gaps |
+| `label_silence_regions` | `SilenceLabels` | Replace labeled audio with silence, keeping length |
+| `label_split_regions` | `SplitLabels` | Split clips at label boundaries |
+| `label_join_regions` | `JoinLabels` | Rejoin clips across labeled regions |
+
+**All five act on labeled regions within the current selection on the SELECTED AUDIO TRACKS** — select the audio tracks and time range first (`select_all` for the whole project). The labels themselves are not removed.
+
+Typical cleanup: label every bad take or dead-air stretch, then `label_delete_regions` to remove them in one pass. Typical redaction: label the section, then `label_silence_regions` so the material does not get shorter and stays in sync.
+
+### `label_export_chapters`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | str | — | Absolute output path (must not already exist) |
+| `format` | str | "simple" | `simple`, `cue` or `podlove` |
+
+Exports labels as a standard chapter/marker file — chapter navigation for long-form audio, a track listing for a continuous mix, an index for a lecture or interview recording. `simple` writes `HH:MM:SS.mmm Title` per line, `cue` writes a cue sheet, `podlove` writes Podlove Simple Chapters JSON. Labels with no text become "Chapter 1", "Chapter 2" and so on.
+
+### `label_export_audio_segments`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `directory` | str | — | Absolute output directory |
+| `format` | str | "wav" | `wav`, `mp3`, `ogg`, `flac`, `aiff`, `mp4` |
+| `num_channels` | int | 2 | 1 for mono, 2 for stereo |
+
+Exports the audio under each label as its own file, named `01_Segment_Title.wav` from the label text. Point labels have no audio and are skipped (reported as `skipped_point_labels`). Existing files are never overwritten (reported as `skipped_existing`). Max 100 segments per call. **Tell the user which directory the files go to before calling this.**
 
 ### `label_import`
 

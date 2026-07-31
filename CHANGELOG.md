@@ -2,6 +2,39 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [Unreleased]
+
+### Working With Labels, Not Just Creating Them
+
+The Labels category could create labels but barely do anything with them: no way to read a label's index, rename one, delete one, or act on the audio underneath. Labels are how you mark up a long recording, so anything driven by those marks — trimming bad takes, redacting a section, exporting chapter markers, splitting a recording into per-segment files — had no path through the server at all. 12 new tools (131 → 143), no changes to existing tool behavior.
+
+**Reading and editing labels.** `label_get_all` returned Audacity's raw `GetInfo` blob with the label JSON unparsed in `["message"]`, so nothing downstream could act on a specific label.
+
+- `label_list` returns parsed labels with the flat index `SetLabel` expects, `label_find` searches their text case-insensitively.
+- `label_edit` wraps `SetLabel`, sending only the fields passed so a rename can't silently move a boundary. `label_add_batch` adds a whole marker list in one call, validating every item before sending anything so a bad item can't leave a half-written list behind.
+- Internals: `count_existing_labels()` grew a sibling, `get_parsed_labels()`, which does the same version-agnostic JSON walk but keeps each label's timing, text and owning track ordinal. `count_existing_labels()` is now a `len()` over it, so the 0.1.13 index fix and everything built on it (including the transcription labeling loop) keeps working unchanged.
+
+**Deleting a single label.** Audacity has no scripting command for this — `DeleteLabels` deletes the *audio* under labels, which is a different operation entirely.
+
+- `label_delete` selects the label's own span on its own label track (via `GetInfo Type=Tracks` to map the label's track ordinal to the absolute track index `SelectTracks` wants) and issues `SplitDelete`. Audio tracks are never in the selection, so nothing shifts in time.
+- Labels on the same track sitting entirely inside the deleted span would be collateral damage, so they are captured beforehand and re-added afterwards. A label that only *partially* overlaps may be trimmed to the boundary — documented in the docstring rather than silently papered over.
+- The tool re-reads the label list afterwards and returns `success: false` if the count didn't actually drop, rather than reporting a delete that never happened.
+
+**Acting on labeled audio.** Five thin wrappers over the labeled-region menu commands: `label_cut_regions` (`CutLabels`), `label_delete_regions` (`DeleteLabels`), `label_silence_regions` (`SilenceLabels`), `label_split_regions` (`SplitLabels`), `label_join_regions` (`JoinLabels`). Label the unwanted stretches and remove them in one pass; label a section and silence it without shortening the material. Every docstring states that these act on the *selected audio tracks* and leave the labels in place — the most likely way to misuse them is to forget the selection step. `CopyLabels`, `SplitCutLabels`, `SplitDeleteLabels` and `DisjoinLabels` were deliberately left out: near-duplicate verbs that would dilute tool selection for little gain, and easy to add if anyone asks.
+
+**Getting labelled work back out.**
+
+- `label_export_chapters` writes labels as a standard marker file: simple chapters (`HH:MM:SS.mmm Title`), a cue sheet, or Podlove Simple Chapters JSON. Pure Python off the parsed labels, so it needs no extra Audacity round trips.
+- `label_export_audio_segments` exports the audio under each label as its own file, named from the label text. Point labels are skipped (no audio to export), existing files are never overwritten, and both are reported back rather than passed over in silence.
+
+**`analyze_label_sounds` now exposes all of `LabelSounds`.** It only passed 3 of the plugin's 8 parameters. Added `measurement`, `label_type`, `pre_offset`, `post_offset` and `label_text`, all with defaults that leave the existing wire call byte-identical. `label_type="between"` labels the silences instead of the sounds, which pairs directly with `label_delete_regions` for trimming dead air out of a long recording. The hyphenated names (`pre-offset`, `post-offset`) aren't valid Python identifiers and go through `client.execute`'s existing `extra_params` dict.
+
+- **Worth a look while smoke-testing:** the three pre-existing parameters are sent as `Threshold`/`MinSilence`/`MinSound`, but the scripting reference documents `LabelSounds` as taking `threshold`/`sil-dur`/`snd-dur`. If the documented names are the real ones, the two duration parameters have never reached Audacity and it has been silently using its own defaults. Left alone here rather than changed blind — correcting a working call on a guess is the worse failure mode, and this belongs in its own fix once someone can confirm against a running Audacity.
+
+**Testing.** `tests/test_label_tools.py` grew from 8 to 62 tests; suite total 92 → 150. Covers the parser across both `GetInfo` schemas, per-tool validation, exact command sequences for `label_delete` (including the point-label epsilon region and the collateral re-add), the chapter formatters as pure functions, and the export tools against `tmp_path`.
+
+- **Not independently tested against a live Audacity instance** — no running Audacity was available, so `label_delete`'s `SplitDelete`-on-a-label-track behavior and the new `LabelSounds` parameter names are verified against the scripting reference and unit tests with mocked responses, not observed. Same caveat as 0.1.13; please smoke-test both before considering this closed.
+
 ## [0.1.19] - 2026-08-01
 
 ### install.bat: `goto` Out of an if/else Block Silently Corrupted Script Flow
