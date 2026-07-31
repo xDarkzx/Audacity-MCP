@@ -74,7 +74,7 @@ bash install.sh
 <details>
 <summary>Other MCP clients (Cursor, Claude Code, etc.)</summary>
 
-If you're not using Claude Desktop, install manually with `pip install audacity-mcp` and add to your client's MCP config:
+If you're not using Claude Desktop, install manually with `pip install audacity-mcp-server` and add to your client's MCP config:
 
 ```json
 {
@@ -96,7 +96,7 @@ Check your client's MCP documentation for the config file location.
 No `install.bat`/`install.sh`, nothing touching your system automatically — three steps, all done by hand:
 
 1. **Enable mod-script-pipe in Audacity**: Edit → Preferences (Windows/Linux) or Audacity → Preferences (macOS) → Modules → set `mod-script-pipe` to Enabled → OK → restart Audacity.
-2. **Install the package**: `pip install audacity-mcp` — a normal PyPI install, no repo clone needed.
+2. **Install the package**: `pip install audacity-mcp-server` — a normal PyPI install, no repo clone needed.
 3. **Configure Claude Desktop**: open Claude Desktop → Settings → Developer tab → Edit Config, and add the `"audacity"` entry (see the JSON above) inside `"mcpServers"`, keeping any other servers you already have. Save and restart Claude Desktop.
 
 That's the entire install — see the [Installation Guide](docs/INSTALLATION.md) for the same steps with more detail and per-OS notes.

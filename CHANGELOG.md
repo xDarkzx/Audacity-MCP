@@ -2,6 +2,17 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [0.1.17] - 2026-08-01
+
+### PyPI Package Renamed to `audacity-mcp-server`
+
+Setting up the new tokenless PyPI publish workflow (see 0.1.16 below) surfaced that the `audacity-mcp` project on PyPI belongs to a different PyPI account than the one publishing this repo going forward, so Trusted Publishing couldn't be linked to it. Rather than depend on access to that other account, the package is published under a new name this account owns outright.
+
+- PyPI package renamed: `audacity-mcp` → **`audacity-mcp-server`** (`pip install audacity-mcp-server`).
+- The installed CLI command is unaffected — it's still `audacity-mcp` (and `audacity-mcp-setup-gpu`), since `[project.scripts]` in `pyproject.toml` is independent of the package's PyPI name. **No existing Claude Desktop config needs to change.**
+- Updated `README.md` and `docs/INSTALLATION.md` pip-install references accordingly.
+- The old `audacity-mcp` PyPI project is not affiliated with this repo and will not receive further updates from here.
+
 ## [0.1.16] - 2026-08-01
 
 ### install.bat/install.sh: Claude Desktop Never Getting Configured on Windows, and a Redundant Reinstall

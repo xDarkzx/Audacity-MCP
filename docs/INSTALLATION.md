@@ -46,10 +46,10 @@ The installer handles Steps 2 and 3 for you — skip to [Verify It Works](#verif
 ### Option B: pip install from PyPI (recommended)
 
 ```bash
-pip install audacity-mcp
+pip install audacity-mcp-server
 ```
 
-That's it. This gives you the `audacity-mcp` command. No git clone needed.
+That's it. This gives you the `audacity-mcp` command (the PyPI package is named `audacity-mcp-server`, but the installed command is still `audacity-mcp`). No git clone needed.
 
 ### Option C: From source (for developers)
 
@@ -80,7 +80,7 @@ Pick your client below. Each section shows the **complete config file** — copy
 
 **Option A: Installed with pip** (recommended — simplest config)
 
-If you installed via `pip install audacity-mcp` or the one-click installer, your config is just:
+If you installed via `pip install audacity-mcp-server` or the one-click installer, your config is just:
 
 ```json
 {
@@ -235,7 +235,7 @@ The `command` field tells your AI client **what program to run** — it can't be
 
 If you didn't pip install, you need the full Python path in `command` because the AI client needs to know where Python is on your system. The `cwd` tells it where the AudacityMCP code lives.
 
-**TL;DR:** Run `pip install audacity-mcp` and your config is just `"command": "audacity-mcp"` — no paths needed.
+**TL;DR:** Run `pip install audacity-mcp-server` and your config is just `"command": "audacity-mcp"` — no paths needed.
 
 ---
 
