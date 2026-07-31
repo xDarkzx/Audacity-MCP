@@ -67,7 +67,9 @@ cd Audacity-MCP
 bash install.sh
 ```
 
-> The installer does 3 things: installs `audacity-mcp` from PyPI, enables mod-script-pipe in Audacity, and **configures Claude Desktop** — no manual JSON editing needed.
+> The installer does 3 things: installs `audacity-mcp` from **this local folder** (the one you just downloaded/cloned — no PyPI or GitHub fetch involved), enables mod-script-pipe in Audacity, and **configures Claude Desktop** — no manual JSON editing needed. It asks for confirmation before touching either config file, explains exactly what it's about to do first, and always backs up an existing file before changing it. Want to see everything it would do without changing anything? Add `--dry-run`: `.\install.bat --dry-run` / `bash install.sh --dry-run`.
+>
+> Note: `install.bat`/`install.sh` must be run from inside this folder — they only install the code sitting right next to them, they don't download anything themselves.
 
 <details>
 <summary>Other MCP clients (Cursor, Claude Code, etc.)</summary>
@@ -85,6 +87,19 @@ If you're not using Claude Desktop, install manually with `pip install audacity-
 ```
 
 Check your client's MCP documentation for the config file location.
+
+</details>
+
+<details>
+<summary>Prefer not to run a script at all? Full manual setup</summary>
+
+No `install.bat`/`install.sh`, nothing touching your system automatically — three steps, all done by hand:
+
+1. **Enable mod-script-pipe in Audacity**: Edit → Preferences (Windows/Linux) or Audacity → Preferences (macOS) → Modules → set `mod-script-pipe` to Enabled → OK → restart Audacity.
+2. **Install the package**: `pip install audacity-mcp` — a normal PyPI install, no repo clone needed.
+3. **Configure Claude Desktop**: open Claude Desktop → Settings → Developer tab → Edit Config, and add the `"audacity"` entry (see the JSON above) inside `"mcpServers"`, keeping any other servers you already have. Save and restart Claude Desktop.
+
+That's the entire install — see the [Installation Guide](docs/INSTALLATION.md) for the same steps with more detail and per-OS notes.
 
 </details>
 
@@ -383,6 +398,7 @@ The installer enables this automatically, but if it didn't work (e.g. Audacity w
 | Pipes missing in /tmp (macOS/Linux) | Check Audacity is running and mod-script-pipe is enabled. Check Audacity's console for errors. |
 | Using Snap or Flatpak Audacity on Linux | Both sandbox `/tmp`, so AudacityMCP auto-detects the real pipe location inside Audacity's mount namespace — no setup needed. If auto-detection fails (containers, restrictive ptrace policies, unusual sandboxing), set the `AUDACITY_PIPE_DIR` environment variable to the directory holding the pipes and it'll be used directly. |
 | Installer says "Audacity config not found" but Audacity definitely runs | If you're running a **portable** Audacity (a `Portable Settings` folder next to the executable), it keeps `audacity.cfg` there instead of the normal per-OS location, so the installer can't find it. Enable `mod-script-pipe` manually instead (Preferences → Modules). |
+| `install.bat` said it configured Claude Desktop, but Audacity never shows up as a tool | Claude Desktop installed via the **Microsoft Store** redirects its config into an isolated per-package folder — older `install.bat` versions only wrote to the standard `%APPDATA%\Claude\` path, which the Store build never reads | Update to the latest `install.bat` and re-run it, or add the config yourself via Claude Desktop → Settings → Developer → Edit Config (see [Installation Guide](docs/INSTALLATION.md#claude-desktop)) — that always opens the correct file regardless of install type |
 
 ---
 

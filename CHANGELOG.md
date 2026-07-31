@@ -2,6 +2,29 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [0.1.16] - 2026-08-01
+
+### install.bat/install.sh: Claude Desktop Never Getting Configured on Windows, and a Redundant Reinstall
+
+A user reported the installer didn't seem to actually connect AudacityMCP to Claude Desktop.
+
+- **Root cause**: the Microsoft Store / MSIX build of Claude Desktop redirects its `%APPDATA%` writes into an isolated per-package folder (`%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\`) instead of the standard `%APPDATA%\Claude\` path. `install.bat` only ever wrote to the standard path, which that build never reads — so the config step silently did nothing useful for anyone on the Store build.
+- **Fix**: config writing is now a shared subroutine, called once for the standard path and once for every `Claude_*` folder found under `%LOCALAPPDATA%\Packages\`, so both install types get configured.
+
+**The installer was also always re-fetching the package it was sitting right next to.** Both scripts ran `pip install audacity-mcp` unconditionally — fetching fresh from PyPI even when run from inside a just-cloned/downloaded copy of the repo, which is the only way you'd have `install.bat`/`install.sh` in the first place. That's a pointless redundant download, and it also meant the installer could install an older *published* version instead of whatever fixes were sitting in the local copy the user just got.
+
+- Both scripts now always install from the local folder the script itself lives in (`pip install "<script's own folder>"`), never from PyPI or GitHub.
+- If the script is ever separated from the rest of the repo (moved or downloaded standalone, no `pyproject.toml` next to it), it now refuses to run with a clear error instead of silently trying to fetch the code from somewhere else.
+- Fixed a related display bug in `install.bat`'s Python check: `%PYVER%` was expanding at parse-time (before the `for /f` that sets it, inside the same `if (...)` block) so the detected version always printed blank — `Found Python  - already installed`. Switched to delayed expansion (`!PYVER!`).
+
+**Other hardening in this pass, since the whole install flow was under review:**
+
+- Added `--dry-run` (`-n` on macOS/Linux) to both scripts — prints every action (package install, Audacity config edit, Claude Desktop config edit) without changing anything.
+- Both scripts now explain what the Claude Desktop config step does and ask for an explicit y/n confirmation *before* touching that file at all, not just before overwriting it — matching the existing confirmation already in place for Audacity's config.
+- Stripped a handful of non-ASCII characters (`──`, `—`) from `install.bat` that could cause cmd.exe to misparse the file under some codepages; both scripts are now pure ASCII.
+- Restructured (not removed) the Python-missing detection/auto-install flow in both scripts to be more reliable about skipping the winget/brew/apt/dnf/pacman install offer when Python is already present.
+- Updated `README.md` and `docs/INSTALLATION.md` to match: Quick Start / Option A now walks through "download or clone the repo, then run the installer from inside it" instead of a standalone single-file download or `curl | bash` one-liner (which no longer works now that the script requires the repo around it).
+
 ## [0.1.15] - 2026-07-29
 
 ### Transcription: Wrong-Language Retries, and Model Re-Downloads

@@ -22,13 +22,26 @@ That's it. The plugin creates named pipes that AudacityMCP connects to automatic
 
 ### Option A: One-click installer (easiest)
 
-- **Windows:** Download [`install.bat`](../install.bat) from the repo → double-click it
-- **macOS / Linux:** Run this in your terminal:
-  ```bash
-  curl -fsSL https://raw.githubusercontent.com/xDarkzx/Audacity-MCP/main/install.sh | bash
-  ```
+`install.bat`/`install.sh` only install the code sitting right next to them — they don't fetch anything from PyPI or GitHub themselves. So get the whole repo first, then run the script from inside it:
 
-The installer handles Steps 2 and 3 for you — skip to [Verify It Works](#verify-it-works).
+1. Click the green **Code** button on the [repo page](https://github.com/xDarkzx/Audacity-MCP) → **Download ZIP** → extract it, **or** clone it:
+   ```bash
+   git clone https://github.com/xDarkzx/Audacity-MCP.git
+   cd Audacity-MCP
+   ```
+2. Run the installer from inside that folder:
+   - **Windows:** double-click `install.bat`, or from the same terminal: `.\install.bat`
+   - **macOS / Linux:** `bash install.sh`
+
+The installer handles Steps 2 and 3 for you — skip to [Verify It Works](#verify-it-works). It explains what it's about to do and asks for confirmation before touching either Audacity's or Claude Desktop's config file, and always backs up an existing file first.
+
+> **Want to see everything it would do before it does it?** Read the script first — it's plain text, nothing hidden (`cat install.sh` / open `install.bat` in Notepad) — or add `--dry-run` to print every action it would take (installing the package, editing Audacity's config, editing Claude Desktop's config) without changing anything:
+> ```bash
+> bash install.sh --dry-run
+> ```
+> Windows: `install.bat --dry-run`.
+>
+> If the script ever gets separated from the rest of the repo folder (moved or downloaded on its own), it will refuse to run with a clear error instead of trying to fetch the code from somewhere else.
 
 ### Option B: pip install from PyPI (recommended)
 
@@ -115,14 +128,29 @@ If you skipped `pip install` and want to run directly from the cloned repo, you 
 ```
 
 <details>
-<summary>Config file locations (if you prefer to edit manually)</summary>
+<summary>Recommended: edit the config through Claude Desktop itself</summary>
 
-- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+This is the most reliable way to edit the config manually — Claude Desktop opens its own real config file, so there's no risk of editing the wrong one (see the Windows Store note below for why that matters).
+
+1. Open **Claude Desktop**
+2. Click **Settings** (gear icon)
+3. Go to the **Developer** tab
+4. Click **Edit Config** — this opens `claude_desktop_config.json` directly
+5. Add the `"audacity"` entry inside the existing `"mcpServers"` block (see the examples above for the exact JSON), keeping any other servers you already have configured
+6. Save the file and **restart Claude Desktop**
 
 </details>
 
-Save the config and **restart Claude Desktop**.
+<details>
+<summary>Config file locations (if you'd rather find the file yourself)</summary>
+
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows (standard install):** `%APPDATA%\Claude\claude_desktop_config.json`
+- **Windows (Microsoft Store build)**: `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude_desktop_config.json` — the Store build redirects `%APPDATA%` into its own isolated package folder, so the standard path above is a dead file it never reads. The `<id>` segment varies per install; look for a folder under `%LOCALAPPDATA%\Packages\` starting with `Claude_`. If you're not sure which build you have, use the **Edit Config** method above instead — it always opens the correct file regardless of install type.
+
+</details>
+
+Save the config and **restart Claude Desktop** — for the Microsoft Store build, fully quit it first (closing the window can leave it running in the background).
 
 ### Claude Code (CLI)
 
@@ -337,3 +365,4 @@ We deliberately don't auto-edit this file for you — it's shared with any other
 | Long file's transcript/labels stop partway through, no error shown | Fixed in v0.1.14 — a background job watchdog was killing jobs after 10 minutes of *total* runtime instead of 10 minutes of no progress, cutting off long files mid-way through labeling | Update to v0.1.14+ (`pip install --upgrade audacity-mcp`). If it still happens on a very long file, it's a genuinely stuck job now, not a false timeout |
 | Config not working | Wrong path or JSON syntax | Copy the complete example above, replace paths, validate JSON at jsonlint.com |
 | Installer says config not found, but Audacity runs fine | You're running a **portable** Audacity (a `Portable Settings` folder next to the executable) | It stores `audacity.cfg` there instead of the normal location — enable `mod-script-pipe` manually (Preferences → Modules) |
+| Ran `install.bat`, it said "Configured Claude Desktop", but Audacity never shows up as a tool in Claude | Claude Desktop installed via the **Microsoft Store** redirects its config into an isolated per-package folder — `install.bat` versions before the fix (check `CHANGELOG.md`) only wrote to the standard `%APPDATA%\Claude\` path, which the Store build never reads | Update to the latest `install.bat` and re-run it (it now writes to both locations), or add the config manually — see ["Recommended: edit the config through Claude Desktop itself"](#claude-desktop) above, which always finds the right file regardless of install type |
