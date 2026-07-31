@@ -78,13 +78,18 @@ class TestAnalyzeLabelSounds:
         return mcp._tool_manager._tools
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_defaults_keep_the_original_wire_call(self, tools):
+    async def test_defaults_send_nothing_extra_at_all(self, tools):
+        # Regression: sending the new parameters unconditionally changed the
+        # wire call for every existing caller. A default call must look exactly
+        # as it did before they were exposed.
+        from audacity_mcp_shared.pipe_protocol import format_command
         await tools["analyze_label_sounds"].fn()
         call = self.client.execute_long.call_args
         assert call.args[0] == "LabelSounds"
-        assert call.kwargs["Threshold"] == -30.0
-        assert call.kwargs["MinSilence"] == 0.5
-        assert call.kwargs["MinSound"] == 0.1
+        assert call.kwargs["extra_params"] is None
+        assert (format_command("LabelSounds", **{k: v for k, v in call.kwargs.items()
+                                                 if k != "extra_params"})
+                == "LabelSounds: Threshold=-30.0 MinSilence=0.5 MinSound=0.1\n")
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_hyphenated_params_go_through_extra_params(self, tools):
@@ -101,6 +106,11 @@ class TestAnalyzeLabelSounds:
             "post-offset": 0.5,
             "text": "Speech",
         }
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_only_the_parameters_asked_for_are_sent(self, tools):
+        await tools["analyze_label_sounds"].fn(label_type="between")
+        assert self.client.execute_long.call_args.kwargs["extra_params"] == {"type": "between"}
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_invalid_enums_rejected(self, tools):

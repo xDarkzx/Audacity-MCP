@@ -772,7 +772,9 @@ Labels regions of sound separated by silence — a good starting point for segme
 | `label_type` | str | "before" | What to label: `before`, `after`, `around`, `between` |
 | `pre_offset` | float | 0.0 | Extend each label before the sound (s, 0-3600) |
 | `post_offset` | float | 0.0 | Extend each label after the sound (s, 0-3600) |
-| `label_text` | str | "Sound" | Text for each label |
+| `label_text` | str | "" | Text for each label (empty = Audacity's own default) |
+
+Each of `measurement`, `label_type`, `pre_offset`, `post_offset` and `label_text` is only sent to Audacity when set to something other than its default, so a default call is byte-for-byte what it was before these were exposed.
 
 Use `label_type="between"` to label the silences instead of the sounds, then remove them with `label_delete_regions`.
 

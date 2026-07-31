@@ -60,7 +60,7 @@ def register(mcp: FastMCP):
         label_type: str = "before",
         pre_offset: float = 0.0,
         post_offset: float = 0.0,
-        label_text: str = "Sound",
+        label_text: str = "",
     ) -> dict:
         """Automatically label regions of sound separated by silence.
 
@@ -76,7 +76,7 @@ def register(mcp: FastMCP):
             label_type: What to label — before, after, around or between the sounds. Default: before
             pre_offset: Seconds to extend each label before the sound starts. Default: 0
             post_offset: Seconds to extend each label after the sound ends. Default: 0
-            label_text: Text for each label. Default: "Sound"
+            label_text: Text for each label. Default: Audacity's own default
         """
         if measurement not in LABEL_SOUNDS_MEASUREMENTS:
             raise AudacityMCPError(
@@ -96,15 +96,28 @@ def register(mcp: FastMCP):
         if len(label_text) > MAX_LABEL_LENGTH:
             raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE,
                                    f"Label text too long (max {MAX_LABEL_LENGTH})")
+
+        # Only send a parameter that was actually asked for. Sending all of them
+        # unconditionally changed the wire call for every existing caller, and
+        # an unrecognised name is enough to make the whole command misbehave -
+        # exactly the risk this tool already carries with Threshold/MinSilence/
+        # MinSound (see CHANGELOG). Defaults here match Audacity's own, so
+        # omitting them leaves the call as it was before these were exposed.
+        extra_params = {}
+        if measurement != "peak":
+            extra_params["measurement"] = measurement
+        if label_type != "before":
+            extra_params["type"] = label_type
+        if pre_offset:
+            extra_params["pre-offset"] = pre_offset
+        if post_offset:
+            extra_params["post-offset"] = post_offset
+        if label_text:
+            extra_params["text"] = label_text
+
         return await client.execute_long(
             "LabelSounds",
-            extra_params={
-                "measurement": measurement,
-                "type": label_type,
-                "pre-offset": pre_offset,
-                "post-offset": post_offset,
-                "text": label_text,
-            },
+            extra_params=extra_params or None,
             Threshold=threshold_db,
             MinSilence=min_silence_duration,
             MinSound=min_sound_duration,
