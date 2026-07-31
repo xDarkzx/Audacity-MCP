@@ -666,6 +666,37 @@ class TestLabelDelete:
         assert _calls_for(client, "AddLabel") == []
 
     @pytest.mark.asyncio(loop_scope="function")
+    async def test_failure_surfaces_audacitys_own_replies_not_a_guess(self):
+        # The count not dropping is an observation. The reason has to come from
+        # Audacity, not from us inventing one.
+        client = _delete_client(TWO_LABELS, TWO_LABELS)
+
+        async def _execute(command, *args, **kwargs):
+            if command == "GetInfo":
+                message = (ONE_WAVE_ONE_LABEL_TRACK if kwargs.get("Type") == "Tracks"
+                           else TWO_LABELS)
+                return {"success": True, "raw": "", "message": message, "data": {}}
+            if command == "SplitDelete":
+                return {"success": False, "raw": "Selected tracks cannot be edited.\nBatchCommand finished: Failed!",
+                        "message": "Selected tracks cannot be edited.", "data": {}}
+            return {"success": True, "raw": "", "message": "", "data": {}}
+
+        client.execute = AsyncMock(side_effect=_execute)
+        result = await _register(client)["label_delete"].fn(index=0)
+
+        assert result["success"] is False
+        responses = result["audacity_responses"]
+        assert responses["SplitDelete"]["success"] is False
+        assert responses["SplitDelete"]["message"] == "Selected tracks cannot be edited."
+        assert "BatchCommand finished: Failed!" in responses["SplitDelete"]["raw"]
+        # Our own text states what was observed, without inventing a cause.
+        assert "count did not drop" in result["message"]
+        assert "locked" not in result["message"]
+        # Enough context to tell whether the point-label epsilon region is at fault.
+        assert result["target_was_point_label"] is False
+        assert result["selected_region"] == {"start": 0.0, "end": 10.0}
+
+    @pytest.mark.asyncio(loop_scope="function")
     async def test_index_past_end_rejected(self):
         with pytest.raises(AudacityMCPError) as exc:
             await _register(_mock_client(TWO_LABELS))["label_delete"].fn(index=9)

@@ -149,6 +149,15 @@ async def add_labels_at(client, labels: list[dict]) -> int:
     return base
 
 
+def _command_report(result: dict) -> dict:
+    """Audacity's own reply to one command, for surfacing in a failure payload."""
+    return {
+        "success": result.get("success", False),
+        "message": result.get("message", ""),
+        "raw": result.get("raw", ""),
+    }
+
+
 async def remove_label(client, index: int) -> dict:
     """Remove one label by flat index, leaving all audio untouched.
 
@@ -187,20 +196,31 @@ async def remove_label(client, index: int) -> dict:
                   and label["index"] != index
                   and region_start <= label["start"] and label["end"] <= region_end]
 
-    await client.execute("SelectTracks", Track=absolute_track, TrackCount=1, Mode="Set")
-    await client.execute("SelectTime", Start=region_start, End=region_end)
-    await client.execute("SplitDelete")
+    select_tracks = await client.execute(
+        "SelectTracks", Track=absolute_track, TrackCount=1, Mode="Set")
+    select_time = await client.execute("SelectTime", Start=region_start, End=region_end)
+    split_delete = await client.execute("SplitDelete")
 
     remaining = await get_parsed_labels(client)
     if len(remaining) >= len(labels):
+        # Report what Audacity actually said rather than guessing at a cause -
+        # the count not dropping is an observation, not a diagnosis.
         return {
             "success": False,
-            "message": ("Audacity did not remove the label — nothing was deleted. "
-                        "The label track may be locked, or this Audacity version may "
-                        "not support SplitDelete on label tracks."),
+            "message": (f"The label count did not drop after SplitDelete "
+                        f"({len(labels)} before, {len(remaining)} after). Audacity's own "
+                        f"reply to each command is under 'audacity_responses'."),
             "index": index,
             "count_before": len(labels),
             "count_after": len(remaining),
+            "target_was_point_label": target["end"] <= target["start"],
+            "selected_region": {"start": region_start, "end": region_end},
+            "selected_track": absolute_track,
+            "audacity_responses": {
+                "SelectTracks": _command_report(select_tracks),
+                "SelectTime": _command_report(select_time),
+                "SplitDelete": _command_report(split_delete),
+            },
         }
 
     restored = 0
