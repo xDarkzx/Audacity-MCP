@@ -20,6 +20,13 @@ Prompted by an install failure report and the suspicion that more people silentl
 - Both scripts now write a log (`install-log.txt`, next to the script, overwritten each run) capturing Python version, each step reached, the resolved `audacity-mcp` command, and the Claude Desktop config merge result for every config file touched.
 - Every failure path now prints where the log is and a link to file an issue with it attached, instead of just an error message and a dead end.
 
+### Follow-up fix (same release): Claude Desktop Config Merge Was Silently Failing
+
+Testing the above surfaced a second bug in the same code path, caught and fixed before wider use: the JSON merge logic was still passed to Python as one long `-c "..."` command-line string, and combined with the new `2>>"logfile"` stderr-capture redirect above, cmd.exe's naive same-line paren scanner corrupted the string being executed, producing a `SyntaxError` instead of running the merge. Separately, the merge logic itself had `cmd != 'audacity-mcp'` silently lose its `!` to `setlocal enabledelayedexpansion` (the same character-eating issue as `installed successfully!` elsewhere in this file), turning it into an assignment instead of a comparison. The fallback message shown on a genuine failure also hardcoded the broken bare `"audacity-mcp"` command instead of the real resolved path.
+
+- **Fix**: the merge logic now lives in a real temporary `.py` file (`%TEMP%\audacity_mcp_merge_config.py`), invoked as `python "file.py"` instead of an inline one-liner - removing almost everything that could trip cmd's parser. The `!=` was rewritten as `not (... == ...)` to avoid the delayed-expansion pitfall entirely. The fallback message now shows the real resolved path. Failures capture Python's actual traceback into `install-log.txt`, and mention that a running Claude Desktop holding the file open is a common cause.
+- **Verified against the real system**: ran the fixed installer against this machine's actual multi-server Claude Desktop config (both the standard and Microsoft Store paths, one with unrelated app-internal keys alongside `mcpServers`) with Claude Desktop open. Confirmed the `audacity` entry was correctly upgraded to the resolved path on both files, every other configured server and every unrelated top-level key was byte-for-byte untouched, and `.bak` backups were created. Also verified the "answered n" decline path leaves the file byte-for-byte untouched (checksum-verified) and the malformed-JSON error path produces a real captured traceback.
+
 ## [0.1.18] - 2026-08-01
 
 ### Claude Desktop Shows No Servers: Bare `"audacity-mcp"` Command Not Resolvable

@@ -92,6 +92,8 @@ If you installed via `pip install audacity-mcp-server` or the one-click installe
 }
 ```
 
+> **Doesn't connect / Audacity never shows up as a tool?** The bare `"audacity-mcp"` command only works if that's on the same PATH Claude Desktop itself uses — a terminal can see it fine while Claude Desktop (a GUI app, especially if it was already running when you installed Python) doesn't. The one-click installer works around this automatically; if you're configuring by hand, run `python -c "import sysconfig; print(sysconfig.get_path('scripts'))"` in a terminal and use the full path it prints instead — e.g. `"command": "C:\\Users\\YourName\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\audacity-mcp.exe"` (Windows) or `"command": "/usr/local/bin/audacity-mcp"` (macOS/Linux).
+
 **Option B: Running from source** (no pip install)
 
 If you skipped `pip install` and want to run directly from the cloned repo, you need to point the config at your Python and the repo folder. Here's a **complete, working config file** — just change the two paths:

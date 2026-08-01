@@ -88,6 +88,8 @@ If you're not using Claude Desktop, install manually with `pip install audacity-
 
 Check your client's MCP documentation for the config file location.
 
+> **Client can't find/run `audacity-mcp`?** GUI apps don't always see the same PATH a terminal does. Run `python -c "import sysconfig; print(sysconfig.get_path('scripts'))"` and use the full path it prints (plus `\audacity-mcp.exe` on Windows or `/audacity-mcp` on macOS/Linux) as `"command"` instead of the bare name.
+
 </details>
 
 <details>
@@ -96,10 +98,24 @@ Check your client's MCP documentation for the config file location.
 No `install.bat`/`install.sh`, nothing touching your system automatically — three steps, all done by hand:
 
 1. **Enable mod-script-pipe in Audacity**: Edit → Preferences (Windows/Linux) or Audacity → Preferences (macOS) → Modules → set `mod-script-pipe` to Enabled → OK → restart Audacity.
-2. **Install the package**: `pip install audacity-mcp-server` — a normal PyPI install, no repo clone needed.
-3. **Configure Claude Desktop**: open Claude Desktop → Settings → Developer tab → Edit Config, and add the `"audacity"` entry (see the JSON above) inside `"mcpServers"`, keeping any other servers you already have. Save and restart Claude Desktop.
+2. **Install the package**: open a terminal (Command Prompt/PowerShell on Windows, Terminal on macOS/Linux) and run `pip install audacity-mcp-server` — a normal PyPI install, no repo clone needed.
+3. **Configure Claude Desktop**: open Claude Desktop → Settings (gear icon) → Developer tab → Edit Config — this opens `claude_desktop_config.json` in a text editor. Add this inside the `"mcpServers"` block, keeping any other servers you already have:
+
+   ```json
+   {
+     "mcpServers": {
+       "audacity": {
+         "command": "audacity-mcp"
+       }
+     }
+   }
+   ```
+
+   Save the file and **fully restart Claude Desktop** (quit from the system tray, not just close the window).
 
 That's the entire install — see the [Installation Guide](docs/INSTALLATION.md) for the same steps with more detail and per-OS notes.
+
+> **`"audacity"` doesn't show up as a tool after restarting?** The `"command": "audacity-mcp"` above only works if that command is on the same PATH Claude Desktop itself uses, which isn't always the case (especially if Claude Desktop was already open when you installed Python). If it doesn't connect, run this in a terminal to find the real install location: `python -c "import sysconfig; print(sysconfig.get_path('scripts'))"` — then replace `"audacity-mcp"` above with the full path it prints plus `\audacity-mcp.exe` (Windows, remember to double every backslash: `\\`) or `/audacity-mcp` (macOS/Linux).
 
 </details>
 

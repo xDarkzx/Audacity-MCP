@@ -13,6 +13,26 @@ echo Started: %DATE% %TIME%
 echo DRY_RUN=%DRY_RUN%
 ) > "%LOG_FILE%" 2>nul
 
+:: Claude Desktop config merge logic lives in a real .py file, not an
+:: inline "python -c ..." one-liner - a long one-liner combined with
+:: redirect syntax (2^>^>) can trip cmd.exe's naive same-line paren
+:: scanner and silently truncate the command it actually runs. A plain
+:: `python "file.py"` call has almost nothing left for that to break on.
+set "MERGE_PY=%TEMP%\audacity_mcp_merge_config.py"
+(
+echo import json, os
+echo p = os.environ['CFG_FILE']
+echo cmd = os.environ['AUD_CMD']
+echo data = json.load^(open^(p, encoding='utf-8'^)^) if os.path.exists^(p^) else {}
+echo servers = data.setdefault^('mcpServers', {}^)
+echo aud = servers.get^('audacity'^)
+echo changed = aud is None or ^(aud.get^('command'^) == 'audacity-mcp' and not ^(cmd == 'audacity-mcp'^)^)
+echo if changed:
+echo     servers['audacity'] = {**^(aud or {}^), 'command': cmd}
+echo     json.dump^(data, open^(p, 'w', encoding='utf-8'^), indent=2^)
+echo print^('WROTE' if changed else 'SKIP'^)
+) > "%MERGE_PY%" 2>nul
+
 echo.
 echo  ============================================
 echo   AudacityMCP - One-Click Installer
@@ -175,6 +195,9 @@ set "AUDACITY_MCP_CMD=audacity-mcp"
 set "PY_SCRIPTS_DIR="
 for /f "delims=" %%p in ('python -c "import sysconfig; print(sysconfig.get_path('scripts'))" 2^>nul') do set "PY_SCRIPTS_DIR=%%p"
 if defined PY_SCRIPTS_DIR if exist "%PY_SCRIPTS_DIR%\audacity-mcp.exe" set "AUDACITY_MCP_CMD=%PY_SCRIPTS_DIR%\audacity-mcp.exe"
+:: JSON-escaped (doubled backslashes) copy, for the fallback manual-edit
+:: message if the automatic JSON merge below ever fails on some machine.
+set "AUDACITY_MCP_CMD_JSON=%AUDACITY_MCP_CMD:\=\\%"
 >>"%LOG_FILE%" echo Resolved audacity-mcp command: %AUDACITY_MCP_CMD%
 
 :: -- Enable mod-script-pipe in Audacity ------------------------
@@ -308,7 +331,7 @@ if exist "%CONFIG_FILE%" copy "%CONFIG_FILE%" "%CONFIG_FILE%.bak" >nul 2>&1
 set "CFG_FILE=%CONFIG_FILE%"
 set "AUD_CMD=%AUDACITY_MCP_CMD%"
 set "MERGE_RESULT="
-for /f "delims=" %%r in ('python -c "import json,os; p=os.environ['CFG_FILE']; cmd=os.environ['AUD_CMD']; data=json.load(open(p,encoding='utf-8')) if os.path.exists(p) else {}; servers=data.setdefault('mcpServers',{}); aud=servers.get('audacity'); changed = aud is None or (aud.get('command')=='audacity-mcp' and cmd!='audacity-mcp'); servers.__setitem__('audacity', {**(aud or {}),'command':cmd}) if changed else None; (changed and json.dump(data, open(p,'w',encoding='utf-8'), indent=2)); print('WROTE' if changed else 'SKIP')" 2^>nul') do set "MERGE_RESULT=%%r"
+for /f "delims=" %%r in ('python "%MERGE_PY%" 2^>^>"%LOG_FILE%"') do set "MERGE_RESULT=%%r"
 
 >>"%LOG_FILE%" echo %CONFIG_FILE%: %MERGE_RESULT%
 
@@ -320,10 +343,13 @@ if "!MERGE_RESULT!"=="WROTE" (
     echo   already correctly configured - skipping.
 ) else (
     echo   WARNING: could not update %CONFIG_FILE% automatically.
+    echo   ^(the real error was saved to %LOG_FILE% - a common cause is
+    echo   Claude Desktop being open and holding the file locked; try
+    echo   closing Claude Desktop completely and re-running^)
     echo   Add this inside your "mcpServers" block by hand:
     echo.
     echo     "audacity": {
-    echo       "command": "audacity-mcp"
+    echo       "command": "%AUDACITY_MCP_CMD_JSON%"
     echo     }
     echo.
     notepad "%CONFIG_FILE%"
