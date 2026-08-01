@@ -2,6 +2,24 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [0.1.19] - 2026-08-01
+
+### install.bat: `goto` Out of an if/else Block Silently Corrupted Script Flow
+
+Found while adding better error logging to `install.bat`: a real, serious bug that has been present since the "Configure Claude Desktop now? (y/n)" prompt was first added in v0.1.16.
+
+- **Root cause**: `goto` cannot safely jump out of the middle of an `if (...) else (...)` compound statement in cmd.exe. The interpreter parses the whole if/else as one unit, and a `goto` escaping mid-way corrupts its parse state - subsequent lines can be silently skipped, duplicated, or executed out of order, with no error shown. Three places in `install.bat` did exactly this: the winget-install-failure path, the pip-install-failure path (both added today), and the "answered n to Configure Claude Desktop now?" path (present since v0.1.16). **The last one means answering "n" could have been silently ignored and the config touched anyway** - the opposite of what was asked for.
+- Caught it concretely: added a diagnostic log file + "report this" message on every failure path (see below), tested the failure path in isolation, and found the script printed the error then barreled straight through the remaining steps to "SETUP COMPLETE" instead of stopping.
+- **Fix**: every one of these now sets a plain flag variable inside the block instead of calling `goto` from within it, then checks that flag in a standalone statement immediately after the if/else closes (goto is only safe once execution is back at the top level, outside any block). Audited every remaining `goto` in the file - all others target labels from inside a plain `if (...)` with no accompanying `else`, which is safe.
+- `install.sh` was never affected - bash doesn't have this pitfall, and its equivalent uses a real function call (`fail_exit()`), not a label jump.
+
+### Better Error Visibility (Both Installers)
+
+Prompted by an install failure report and the suspicion that more people silently give up than report bugs.
+
+- Both scripts now write a log (`install-log.txt`, next to the script, overwritten each run) capturing Python version, each step reached, the resolved `audacity-mcp` command, and the Claude Desktop config merge result for every config file touched.
+- Every failure path now prints where the log is and a link to file an issue with it attached, instead of just an error message and a dead end.
+
 ## [0.1.18] - 2026-08-01
 
 ### Claude Desktop Shows No Servers: Bare `"audacity-mcp"` Command Not Resolvable

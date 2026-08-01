@@ -5,6 +5,14 @@ set "DRY_RUN=0"
 if /i "%~1"=="--dry-run" set "DRY_RUN=1"
 if /i "%~1"=="/dry-run" set "DRY_RUN=1"
 
+set "SCRIPT_DIR=%~dp0"
+set "LOG_FILE=%SCRIPT_DIR%install-log.txt"
+(
+echo AudacityMCP installer log
+echo Started: %DATE% %TIME%
+echo DRY_RUN=%DRY_RUN%
+) > "%LOG_FILE%" 2>nul
+
 echo.
 echo  ============================================
 echo   AudacityMCP - One-Click Installer
@@ -22,9 +30,11 @@ python --version >nul 2>&1
 if %errorlevel% equ 0 (
     for /f "tokens=2" %%v in ('python --version 2^>^&1') do set "PYVER=%%v"
     echo   Found Python !PYVER! - already installed, skipping.
+    >>"%LOG_FILE%" echo Python: !PYVER!
     goto :python_ready
 )
 
+>>"%LOG_FILE%" echo Python: NOT FOUND
 echo.
 echo  Python is not installed or not in PATH.
 echo.
@@ -34,6 +44,13 @@ if "%DRY_RUN%"=="1" (
     echo  then re-run with --dry-run to see the rest.
     exit /b 0
 )
+:: NOTE: goto cannot safely jump out of the middle of an if()/else()
+:: compound statement - cmd.exe parses the whole if/else as one unit and
+:: a goto escaping mid-way corrupts its parse state, causing lines after
+:: the block to be silently skipped or duplicated. Every branch below
+:: that needs to reach :fail_exit sets a flag instead and the actual
+:: goto happens in a plain, unnested statement after the block closes.
+set "WINGET_FAILED=0"
 set /p INSTALL_PY="  Would you like to install Python via winget? (y/n): "
 if /i "!INSTALL_PY!"=="y" (
     echo.
@@ -43,16 +60,15 @@ if /i "!INSTALL_PY!"=="y" (
         echo.
         echo  ERROR: winget install failed.
         echo  Download manually from: https://www.python.org/downloads/
+        set "WINGET_FAILED=1"
+    ) else (
+        echo.
+        echo  Python installed! You need to CLOSE and REOPEN this terminal,
+        echo  then run install.bat again so Python is in your PATH.
         echo.
         pause
-        exit /b 1
+        exit /b 0
     )
-    echo.
-    echo  Python installed! You need to CLOSE and REOPEN this terminal,
-    echo  then run install.bat again so Python is in your PATH.
-    echo.
-    pause
-    exit /b 0
 ) else (
     echo.
     echo  AudacityMCP requires Python 3.10+ to run.
@@ -64,6 +80,7 @@ if /i "!INSTALL_PY!"=="y" (
     pause
     exit /b 1
 )
+if "%WINGET_FAILED%"=="1" goto :fail_exit
 
 :python_ready
 
@@ -74,18 +91,16 @@ if !PY_MAJOR! lss 3 (
     echo.
     echo  ERROR: Python 3.10+ is required, but you have Python %PYVER%
     echo  Download from: https://www.python.org/downloads/
-    echo.
-    pause
-    exit /b 1
+    goto :fail_exit
 )
 if !PY_MAJOR! equ 3 if !PY_MINOR! lss 10 (
     echo.
     echo  ERROR: Python 3.10+ is required, but you have Python %PYVER%
     echo  Download from: https://www.python.org/downloads/
-    echo.
-    pause
-    exit /b 1
+    goto :fail_exit
 )
+
+>>"%LOG_FILE%" echo Python version OK: %PY_MAJOR%.%PY_MINOR%
 
 :: -- Install audacity-mcp -------------------------------------
 :: Warn if running inside a virtual environment
@@ -103,20 +118,19 @@ if defined VIRTUAL_ENV (
 :: copy of the repo (pyproject.toml sitting next to it) - that's the
 :: only way you'd have install.bat in the first place. Install that
 :: local copy directly; never re-fetch the source from anywhere.
-set "SCRIPT_DIR=%~dp0"
 if not exist "%SCRIPT_DIR%pyproject.toml" (
     echo.
     echo  ERROR: pyproject.toml not found next to install.bat.
     echo  This script must be run from inside the AudacityMCP repo folder
     echo  you downloaded/cloned it with - not moved out on its own.
-    echo.
-    pause
-    exit /b 1
+    goto :fail_exit
 )
 
 echo.
 echo [2/5] Installing audacity-mcp from this local repo copy...
+>>"%LOG_FILE%" echo [2/5] Installing audacity-mcp from this local repo copy...
 
+set "STEP2_FAILED=0"
 if "%DRY_RUN%"=="1" (
     echo   [dry-run] Would run: python -m pip install --upgrade pip
     echo   [dry-run] Would run: python -m pip install "%SCRIPT_DIR%."
@@ -130,23 +144,24 @@ if "%DRY_RUN%"=="1" (
             echo.
             echo  ERROR: pip is not installed and ensurepip failed.
             echo  Try reinstalling Python with pip enabled.
-            echo.
-            pause
-            exit /b 1
+            set "STEP2_FAILED=1"
         )
     )
-    python -m pip install --upgrade pip >nul 2>&1
-    python -m pip install "%SCRIPT_DIR%."
-    if !errorlevel! neq 0 (
-        echo.
-        echo  ERROR: pip install failed. Try running as administrator, or run manually:
-        echo    python -m pip install "%SCRIPT_DIR%."
-        echo.
-        pause
-        exit /b 1
+    if not "!STEP2_FAILED!"=="1" (
+        python -m pip install --upgrade pip >nul 2>&1
+        python -m pip install "%SCRIPT_DIR%."
+        if !errorlevel! neq 0 (
+            echo.
+            echo  ERROR: pip install failed. Try running as administrator, or run manually:
+            echo    python -m pip install "%SCRIPT_DIR%."
+            set "STEP2_FAILED=1"
+        ) else (
+            echo   audacity-mcp installed successfully!
+            >>"%LOG_FILE%" echo audacity-mcp installed successfully
+        )
     )
-    echo   audacity-mcp installed successfully!
 )
+if "%STEP2_FAILED%"=="1" goto :fail_exit
 
 :: Resolve the actual installed script path instead of trusting PATH.
 :: python.exe being on PATH doesn't guarantee its Scripts folder is too,
@@ -160,10 +175,12 @@ set "AUDACITY_MCP_CMD=audacity-mcp"
 set "PY_SCRIPTS_DIR="
 for /f "delims=" %%p in ('python -c "import sysconfig; print(sysconfig.get_path('scripts'))" 2^>nul') do set "PY_SCRIPTS_DIR=%%p"
 if defined PY_SCRIPTS_DIR if exist "%PY_SCRIPTS_DIR%\audacity-mcp.exe" set "AUDACITY_MCP_CMD=%PY_SCRIPTS_DIR%\audacity-mcp.exe"
+>>"%LOG_FILE%" echo Resolved audacity-mcp command: %AUDACITY_MCP_CMD%
 
 :: -- Enable mod-script-pipe in Audacity ------------------------
 echo.
 echo [3/5] Enabling mod-script-pipe in Audacity...
+>>"%LOG_FILE%" echo [3/5] Enabling mod-script-pipe in Audacity...
 
 set "AUD_CFG=%APPDATA%\audacity\audacity.cfg"
 
@@ -221,6 +238,7 @@ echo   NOTE: Restart Audacity for this to take effect.
 :: -- Configure Claude Desktop ----------------------------------
 echo.
 echo [4/5] Configuring Claude Desktop...
+>>"%LOG_FILE%" echo [4/5] Configuring Claude Desktop...
 echo.
 echo   This step can add an "audacity" entry to Claude Desktop's config file(s)
 echo   so it launches audacity-mcp automatically - no manual JSON editing needed.
@@ -231,6 +249,7 @@ echo     - If a config already exists, only adds or fixes the audacity entry -
 echo       it never removes or changes any other MCP server you already have
 echo.
 
+set "SKIP_CLAUDE_CONFIG=0"
 if "%DRY_RUN%"=="1" (
     echo   [dry-run] Would ask to configure Claude Desktop here.
 ) else (
@@ -240,9 +259,10 @@ if "%DRY_RUN%"=="1" (
         echo   Skipped. To add it yourself later: open Claude Desktop -^> Settings -^>
         echo   Developer tab -^> Edit Config, then add the audacity entry shown in
         echo   the installation guide.
-        goto :skip_config
+        set "SKIP_CLAUDE_CONFIG=1"
     )
 )
+if "%SKIP_CLAUDE_CONFIG%"=="1" goto :skip_config
 
 call :configure_claude_config "%APPDATA%\Claude"
 
@@ -290,6 +310,8 @@ set "AUD_CMD=%AUDACITY_MCP_CMD%"
 set "MERGE_RESULT="
 for /f "delims=" %%r in ('python -c "import json,os; p=os.environ['CFG_FILE']; cmd=os.environ['AUD_CMD']; data=json.load(open(p,encoding='utf-8')) if os.path.exists(p) else {}; servers=data.setdefault('mcpServers',{}); aud=servers.get('audacity'); changed = aud is None or (aud.get('command')=='audacity-mcp' and cmd!='audacity-mcp'); servers.__setitem__('audacity', {**(aud or {}),'command':cmd}) if changed else None; (changed and json.dump(data, open(p,'w',encoding='utf-8'), indent=2)); print('WROTE' if changed else 'SKIP')" 2^>nul') do set "MERGE_RESULT=%%r"
 
+>>"%LOG_FILE%" echo %CONFIG_FILE%: %MERGE_RESULT%
+
 if "!MERGE_RESULT!"=="WROTE" (
     echo   Configured Claude Desktop at: %CONFIG_FILE%
 ) else if "!MERGE_RESULT!"=="SKIP" (
@@ -320,6 +342,7 @@ if "%DRY_RUN%"=="1" (
     exit /b 0
 )
 echo [5/5] Done!
+>>"%LOG_FILE%" echo [5/5] Done - setup complete
 echo.
 echo  ============================================
 echo   SETUP COMPLETE!
@@ -340,3 +363,15 @@ echo  If this is useful to you, a star on GitHub helps other people find it!
 echo  ============================================
 echo.
 pause
+exit /b 0
+
+:fail_exit
+>>"%LOG_FILE%" echo INSTALL FAILED
+echo.
+echo  Full log saved to: %LOG_FILE%
+echo  If this keeps happening, please report it at:
+echo  https://github.com/xDarkzx/Audacity-MCP/issues
+echo  (attach install-log.txt from this folder so we can see exactly what happened^)
+echo.
+pause
+exit /b 1

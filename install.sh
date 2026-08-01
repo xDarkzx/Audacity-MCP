@@ -8,6 +8,25 @@ for arg in "$@"; do
     fi
 done
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_FILE="$SCRIPT_DIR/install-log.txt"
+{
+    echo "AudacityMCP installer log"
+    echo "Started: $(date)"
+    echo "DRY_RUN=$DRY_RUN"
+} > "$LOG_FILE" 2>/dev/null || true
+
+fail_exit() {
+    { echo ""; echo "INSTALL FAILED"; } >> "$LOG_FILE" 2>/dev/null || true
+    echo ""
+    echo " Full log saved to: $LOG_FILE"
+    echo " If this keeps happening, please report it at:"
+    echo " https://github.com/xDarkzx/Audacity-MCP/issues"
+    echo " (attach install-log.txt from this folder so we can see exactly what happened)"
+    echo ""
+    exit 1
+}
+
 echo ""
 echo " ============================================"
 echo "  AudacityMCP - One-Click Installer"
@@ -25,11 +44,14 @@ if command -v python3 &> /dev/null; then
     PYTHON=python3
     PYVER=$($PYTHON --version 2>&1)
     echo "  Found $PYVER - already installed, skipping."
+    echo "Python: $PYVER" >> "$LOG_FILE" 2>/dev/null || true
 elif command -v python &> /dev/null; then
     PYTHON=python
     PYVER=$($PYTHON --version 2>&1)
     echo "  Found $PYVER - already installed, skipping."
+    echo "Python: $PYVER" >> "$LOG_FILE" 2>/dev/null || true
 else
+    echo "Python: NOT FOUND" >> "$LOG_FILE" 2>/dev/null || true
     echo ""
     echo " Python is not installed."
     echo ""
@@ -49,7 +71,7 @@ else
                 echo " Homebrew not found. Install it first:"
                 echo "   /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
                 echo " Then run this installer again."
-                exit 1
+                fail_exit
             fi
         else
             if command -v apt &> /dev/null; then
@@ -64,7 +86,7 @@ else
             else
                 echo " Could not detect your package manager."
                 echo " Install Python 3.10+ manually: https://www.python.org/downloads/"
-                exit 1
+                fail_exit
             fi
         fi
         # Re-detect after install
@@ -76,7 +98,7 @@ else
             echo ""
             echo " ERROR: Python install succeeded but python3 not found in PATH."
             echo " Close and reopen your terminal, then run this installer again."
-            exit 1
+            fail_exit
         fi
         PYVER=$($PYTHON --version 2>&1)
         echo "  Found $PYVER"
@@ -100,9 +122,9 @@ if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]; }
     echo ""
     echo " ERROR: Python 3.10+ is required, but you have $PYVER"
     echo " Please upgrade Python: https://www.python.org/downloads/"
-    echo ""
-    exit 1
+    fail_exit
 fi
+echo "Python version OK: $PY_MAJOR.$PY_MINOR" >> "$LOG_FILE" 2>/dev/null || true
 
 # Warn if running inside a virtual environment
 if [ -n "${VIRTUAL_ENV:-}" ]; then
@@ -119,18 +141,17 @@ fi
 # copy of the repo (pyproject.toml next to it) - that's the only way
 # you'd have install.sh in the first place. Install that local copy
 # directly; never re-fetch the source from anywhere.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ ! -f "$SCRIPT_DIR/pyproject.toml" ]; then
     echo ""
     echo " ERROR: pyproject.toml not found next to install.sh."
     echo " This script must be run from inside the AudacityMCP repo folder"
     echo " you downloaded/cloned it with - not moved out on its own."
-    echo ""
-    exit 1
+    fail_exit
 fi
 
 echo ""
 echo "[2/5] Installing audacity-mcp from this local repo copy..."
+echo "[2/5] Installing audacity-mcp from this local repo copy..." >> "$LOG_FILE" 2>/dev/null || true
 
 if [ "$DRY_RUN" = "1" ]; then
     echo "  [dry-run] Would run: $PYTHON -m pip install --upgrade pip"
@@ -144,8 +165,7 @@ else
             echo " ERROR: pip is not installed and ensurepip failed."
             echo " Try: $PYTHON -m ensurepip --upgrade"
             echo " Or reinstall Python with pip enabled."
-            echo ""
-            exit 1
+            fail_exit
         fi
     fi
 
@@ -154,10 +174,10 @@ else
         echo ""
         echo " ERROR: pip install failed."
         echo " Try: $PYTHON -m pip install --user \"$SCRIPT_DIR\""
-        echo ""
-        exit 1
+        fail_exit
     fi
     echo "  audacity-mcp installed successfully!"
+    echo "audacity-mcp installed successfully" >> "$LOG_FILE" 2>/dev/null || true
 fi
 
 # Resolve the actual installed script path instead of trusting PATH.
@@ -174,10 +194,12 @@ SCRIPTS_DIR=$($PYTHON -c "import sysconfig; print(sysconfig.get_path('scripts'))
 if [ -n "$SCRIPTS_DIR" ] && [ -x "$SCRIPTS_DIR/audacity-mcp" ]; then
     AUDACITY_MCP_CMD="$SCRIPTS_DIR/audacity-mcp"
 fi
+echo "Resolved audacity-mcp command: $AUDACITY_MCP_CMD" >> "$LOG_FILE" 2>/dev/null || true
 
 # -- Enable mod-script-pipe in Audacity ------------------------
 echo ""
 echo "[3/5] Enabling mod-script-pipe in Audacity..."
+echo "[3/5] Enabling mod-script-pipe in Audacity..." >> "$LOG_FILE" 2>/dev/null || true
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     AUD_CFG="$HOME/Library/Application Support/audacity/audacity.cfg"
@@ -244,6 +266,7 @@ fi
 # -- Configure Claude Desktop ----------------------------------
 echo ""
 echo "[4/5] Configuring Claude Desktop..."
+echo "[4/5] Configuring Claude Desktop..." >> "$LOG_FILE" 2>/dev/null || true
 echo ""
 echo "  This step can add an \"audacity\" entry to Claude Desktop's config file"
 echo "  so it launches audacity-mcp automatically - no manual JSON editing needed."
@@ -289,6 +312,7 @@ else
         # command left over from a previous install) while leaving every
         # other configured MCP server completely untouched.
         MERGE_RESULT=$(CFG_FILE="$CONFIG_FILE" AUD_CMD="$AUDACITY_MCP_CMD" $PYTHON -c "import json,os; p=os.environ['CFG_FILE']; cmd=os.environ['AUD_CMD']; data=json.load(open(p,encoding='utf-8')) if os.path.exists(p) else {}; servers=data.setdefault('mcpServers',{}); aud=servers.get('audacity'); changed = aud is None or (aud.get('command')=='audacity-mcp' and cmd!='audacity-mcp'); servers.__setitem__('audacity', {**(aud or {}),'command':cmd}) if changed else None; (changed and json.dump(data, open(p,'w',encoding='utf-8'), indent=2)); print('WROTE' if changed else 'SKIP')" 2>/dev/null) || MERGE_RESULT="ERROR"
+        echo "$CONFIG_FILE: $MERGE_RESULT" >> "$LOG_FILE" 2>/dev/null || true
 
         if [ "$MERGE_RESULT" = "WROTE" ]; then
             chmod 600 "$CONFIG_FILE"
@@ -318,6 +342,7 @@ if [ "$DRY_RUN" = "1" ]; then
     exit 0
 fi
 echo "[5/5] Done!"
+echo "[5/5] Done - setup complete" >> "$LOG_FILE" 2>/dev/null || true
 echo ""
 echo " ============================================"
 echo "  SETUP COMPLETE!"
