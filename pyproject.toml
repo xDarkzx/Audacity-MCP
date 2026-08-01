@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "audacity-mcp-server"
-version = "0.1.17"
+version = "0.1.18"
 description = "MCP server for AI-driven audio editing in Audacity via mod-script-pipe"
 license = "Apache-2.0"
 authors = [

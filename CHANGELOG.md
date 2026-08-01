@@ -2,6 +2,16 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [0.1.18] - 2026-08-01
+
+### Claude Desktop Shows No Servers: Bare `"audacity-mcp"` Command Not Resolvable
+
+A user reported Claude Desktop showed no MCP servers at all after installing, even though the config file had a correctly-formed `"audacity"` entry with `"command": "audacity-mcp"`.
+
+- **Root cause**: that bare command relies on `audacity-mcp.exe`'s folder being on PATH for whatever process launches it. A terminal can resolve it fine (`where audacity-mcp` succeeds) while Claude Desktop — a GUI app that can be running with a PATH cached from before Python/pip were installed, or simply launched in an environment that doesn't inherit the same PATH as a freshly opened terminal — fails to spawn it, silently. Since Audacity was this user's only configured server, "no servers show" and "Audacity fails to spawn" were the same event.
+- **Fix**: both installers now resolve the actual installed script's absolute path via the target Python's own `sysconfig.get_path('scripts')` (authoritative regardless of PATH) and write that full path into the Claude Desktop config instead of a bare `"audacity-mcp"` string — eliminating the PATH dependency for Claude Desktop's process entirely.
+- **Also fixes existing broken installs, not just new ones**: config writing switched from crude `findstr`/`grep` text-scanning to a real JSON parse/merge (`python -c "import json; ..."`, since Python is already a hard dependency). Re-running the installer now detects and upgrades an old broken bare `"audacity-mcp"` entry left over from a previous install to the resolved absolute path, while leaving every other already-configured MCP server completely untouched — previously, re-running only ever skipped silently if an `"audacity"` key already existed, broken or not.
+
 ## [0.1.17] - 2026-08-01
 
 ### PyPI Package Renamed to `audacity-mcp-server`

@@ -148,6 +148,19 @@ if "%DRY_RUN%"=="1" (
     echo   audacity-mcp installed successfully!
 )
 
+:: Resolve the actual installed script path instead of trusting PATH.
+:: python.exe being on PATH doesn't guarantee its Scripts folder is too,
+:: and Claude Desktop (a GUI app) can be running with a stale PATH even
+:: when a freshly opened terminal already sees an updated one - so a
+:: bare "audacity-mcp" command can work fine when you test it yourself
+:: and still fail silently for Claude Desktop. sysconfig.get_path finds
+:: the Scripts folder for the exact Python that pip just installed into,
+:: regardless of what's on PATH.
+set "AUDACITY_MCP_CMD=audacity-mcp"
+set "PY_SCRIPTS_DIR="
+for /f "delims=" %%p in ('python -c "import sysconfig; print(sysconfig.get_path('scripts'))" 2^>nul') do set "PY_SCRIPTS_DIR=%%p"
+if defined PY_SCRIPTS_DIR if exist "%PY_SCRIPTS_DIR%\audacity-mcp.exe" set "AUDACITY_MCP_CMD=%PY_SCRIPTS_DIR%\audacity-mcp.exe"
+
 :: -- Enable mod-script-pipe in Audacity ------------------------
 echo.
 echo [3/5] Enabling mod-script-pipe in Audacity...
@@ -214,8 +227,8 @@ echo   so it launches audacity-mcp automatically - no manual JSON editing needed
 echo   What it does, exactly:
 echo     - Backs up any existing config file before touching it (a .bak copy)
 echo     - If no config exists yet, creates one with just the audacity entry
-echo     - If a config already exists, only ADDS the audacity entry - it never
-echo       removes or changes any other MCP server you already have configured
+echo     - If a config already exists, only adds or fixes the audacity entry -
+echo       it never removes or changes any other MCP server you already have
 echo.
 
 if "%DRY_RUN%"=="1" (
@@ -250,16 +263,11 @@ set "CONFIG_FILE=%CONFIG_DIR%\claude_desktop_config.json"
 
 if "%DRY_RUN%"=="1" (
     if exist "%CONFIG_FILE%" (
-        findstr /c:"\"audacity\"" "%CONFIG_FILE%" >nul 2>&1
-        if !errorlevel! equ 0 (
-            echo   %CONFIG_FILE%
-            echo   already has an audacity entry - skipping.
-        ) else (
-            echo   [dry-run] Would back up: %CONFIG_FILE%
-            echo   [dry-run] to: %CONFIG_FILE%.bak
-            echo   [dry-run] Would show you the audacity entry to add manually
-            echo   (existing config has other content - never auto-merged^)
-        )
+        echo   [dry-run] Would back up: %CONFIG_FILE%
+        echo   [dry-run] to: %CONFIG_FILE%.bak if a change is needed, then add or
+        echo   [dry-run] fix only the "audacity" entry - every other server already
+        echo   [dry-run] in the file is left untouched. Also fixes an old broken
+        echo   [dry-run] "audacity-mcp" bare-command entry from a previous install.
     ) else (
         echo   [dry-run] Would create: %CONFIG_FILE%
         echo   [dry-run] with a fresh mcpServers block containing the audacity entry
@@ -269,41 +277,35 @@ if "%DRY_RUN%"=="1" (
 
 if not exist "%CONFIG_DIR%" mkdir "%CONFIG_DIR%" >nul 2>&1
 
-if exist "%CONFIG_FILE%" (
-    findstr /c:"\"audacity\"" "%CONFIG_FILE%" >nul 2>&1
-    if !errorlevel! equ 0 (
-        echo   %CONFIG_FILE%
-        echo   already has an audacity entry - skipping.
-        exit /b
-    )
-    copy "%CONFIG_FILE%" "%CONFIG_FILE%.bak" >nul 2>&1
-    echo   Backed up existing config to: %CONFIG_FILE%.bak
-    echo.
-    echo   Found existing Claude Desktop config at:
+if exist "%CONFIG_FILE%" copy "%CONFIG_FILE%" "%CONFIG_FILE%.bak" >nul 2>&1
+
+:: Use Python for a real JSON parse/merge instead of text-scanning with
+:: findstr - this correctly adds or fixes ONLY the "audacity" entry
+:: (including upgrading an old broken bare "audacity-mcp" command left
+:: over from a previous install, which can't be found if Claude Desktop's
+:: process doesn't have the same PATH as a terminal) while leaving every
+:: other configured MCP server completely untouched.
+set "CFG_FILE=%CONFIG_FILE%"
+set "AUD_CMD=%AUDACITY_MCP_CMD%"
+set "MERGE_RESULT="
+for /f "delims=" %%r in ('python -c "import json,os; p=os.environ['CFG_FILE']; cmd=os.environ['AUD_CMD']; data=json.load(open(p,encoding='utf-8')) if os.path.exists(p) else {}; servers=data.setdefault('mcpServers',{}); aud=servers.get('audacity'); changed = aud is None or (aud.get('command')=='audacity-mcp' and cmd!='audacity-mcp'); servers.__setitem__('audacity', {**(aud or {}),'command':cmd}) if changed else None; (changed and json.dump(data, open(p,'w',encoding='utf-8'), indent=2)); print('WROTE' if changed else 'SKIP')" 2^>nul') do set "MERGE_RESULT=%%r"
+
+if "!MERGE_RESULT!"=="WROTE" (
+    echo   Configured Claude Desktop at: %CONFIG_FILE%
+) else if "!MERGE_RESULT!"=="SKIP" (
+    if exist "%CONFIG_FILE%.bak" del "%CONFIG_FILE%.bak" >nul 2>&1
     echo   %CONFIG_FILE%
-    echo.
-    echo   You need to MANUALLY add this inside your "mcpServers" block:
+    echo   already correctly configured - skipping.
+) else (
+    echo   WARNING: could not update %CONFIG_FILE% automatically.
+    echo   Add this inside your "mcpServers" block by hand:
     echo.
     echo     "audacity": {
     echo       "command": "audacity-mcp"
     echo     }
     echo.
-    echo   Opening the config file for you...
     notepad "%CONFIG_FILE%"
-    exit /b
 )
-
-(
-echo {
-echo   "mcpServers": {
-echo     "audacity": {
-echo       "command": "audacity-mcp"
-echo     }
-echo   }
-echo }
-) > "%CONFIG_FILE%"
-echo   Created Claude Desktop config at:
-echo   %CONFIG_FILE%
 exit /b
 
 :skip_config

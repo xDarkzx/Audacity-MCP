@@ -160,6 +160,21 @@ else
     echo "  audacity-mcp installed successfully!"
 fi
 
+# Resolve the actual installed script path instead of trusting PATH.
+# Python being on PATH doesn't guarantee its scripts folder is too, and
+# a GUI app like Claude Desktop can be running with a different PATH
+# than a terminal (e.g. ~/.local/bin is commonly missing from a
+# GUI-launched app's PATH on Linux even when a shell sees it fine) - so
+# a bare "audacity-mcp" command can work when you test it yourself and
+# still fail silently for Claude Desktop. sysconfig.get_path finds the
+# scripts folder for the exact Python that pip just installed into,
+# regardless of what's on PATH.
+AUDACITY_MCP_CMD="audacity-mcp"
+SCRIPTS_DIR=$($PYTHON -c "import sysconfig; print(sysconfig.get_path('scripts'))" 2>/dev/null) || SCRIPTS_DIR=""
+if [ -n "$SCRIPTS_DIR" ] && [ -x "$SCRIPTS_DIR/audacity-mcp" ]; then
+    AUDACITY_MCP_CMD="$SCRIPTS_DIR/audacity-mcp"
+fi
+
 # -- Enable mod-script-pipe in Audacity ------------------------
 echo ""
 echo "[3/5] Enabling mod-script-pipe in Audacity..."
@@ -235,8 +250,8 @@ echo "  so it launches audacity-mcp automatically - no manual JSON editing neede
 echo "  What it does, exactly:"
 echo "    - Backs up any existing config file before touching it (a .bak copy)"
 echo "    - If no config exists yet, creates one with just the audacity entry"
-echo "    - If a config already exists, only ADDS the audacity entry - it never"
-echo "      removes or changes any other MCP server you already have configured"
+echo "    - If a config already exists, only adds or fixes the audacity entry -"
+echo "      it never removes or changes any other MCP server you already have"
 echo ""
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -249,19 +264,14 @@ CONFIG_FILE="$CONFIG_DIR/claude_desktop_config.json"
 if [ "$DRY_RUN" = "1" ]; then
     echo "  [dry-run] Would ask to configure Claude Desktop here."
     if [ -f "$CONFIG_FILE" ]; then
-        if grep -q '"audacity"' "$CONFIG_FILE" 2>/dev/null; then
-            echo "  Claude Desktop config already has audacity entry - skipping."
-        else
-            echo "  [dry-run] Would back up: $CONFIG_FILE -> $CONFIG_FILE.bak"
-            echo "  [dry-run] Would show you the audacity entry to add manually"
-            echo "  (existing config has other content - never auto-merged)"
-        fi
+        echo "  [dry-run] Would back up: $CONFIG_FILE -> $CONFIG_FILE.bak if a change is"
+        echo "  [dry-run] needed, then add or fix only the audacity entry - every other"
+        echo "  [dry-run] server already in the file is left untouched. Also fixes an old"
+        echo "  [dry-run] broken bare \"audacity-mcp\" command left from a previous install."
     else
         echo "  [dry-run] Would create: $CONFIG_FILE"
         echo "  [dry-run] with a fresh mcpServers block containing the audacity entry"
     fi
-elif [ -f "$CONFIG_FILE" ] && grep -q '"audacity"' "$CONFIG_FILE" 2>/dev/null; then
-    echo "  Claude Desktop config already has audacity entry - skipping."
 else
     read -rp "  Configure Claude Desktop now? (y/n): " CONFIGURE_CLAUDE
     if [[ ! "$CONFIGURE_CLAUDE" =~ ^[Yy]$ ]]; then
@@ -269,34 +279,32 @@ else
         echo "  Skipped. To add it yourself later: open Claude Desktop -> Settings ->"
         echo "  Developer tab -> Edit Config, then add the audacity entry shown in"
         echo "  the installation guide."
-    elif [ -f "$CONFIG_FILE" ]; then
-        # Back up existing config
-        cp "$CONFIG_FILE" "$CONFIG_FILE.bak"
-        echo "  Backed up existing config to: $CONFIG_FILE.bak"
-        echo ""
-        echo "  Found existing Claude Desktop config at:"
-        echo "  $CONFIG_FILE"
-        echo ""
-        echo "  Add this inside your \"mcpServers\" block:"
-        echo ""
-        echo '    "audacity": {'
-        echo '      "command": "audacity-mcp"'
-        echo '    }'
-        echo ""
     else
         mkdir -p "$CONFIG_DIR"
-        cat > "$CONFIG_FILE" << 'EOF'
-{
-  "mcpServers": {
-    "audacity": {
-      "command": "audacity-mcp"
-    }
-  }
-}
-EOF
-        chmod 600 "$CONFIG_FILE"
-        echo "  Created Claude Desktop config at:"
-        echo "  $CONFIG_FILE"
+        [ -f "$CONFIG_FILE" ] && cp "$CONFIG_FILE" "$CONFIG_FILE.bak"
+
+        # Use Python for a real JSON parse/merge instead of text-scanning
+        # with grep - this correctly adds or fixes ONLY the "audacity"
+        # entry (including upgrading an old broken bare "audacity-mcp"
+        # command left over from a previous install) while leaving every
+        # other configured MCP server completely untouched.
+        MERGE_RESULT=$(CFG_FILE="$CONFIG_FILE" AUD_CMD="$AUDACITY_MCP_CMD" $PYTHON -c "import json,os; p=os.environ['CFG_FILE']; cmd=os.environ['AUD_CMD']; data=json.load(open(p,encoding='utf-8')) if os.path.exists(p) else {}; servers=data.setdefault('mcpServers',{}); aud=servers.get('audacity'); changed = aud is None or (aud.get('command')=='audacity-mcp' and cmd!='audacity-mcp'); servers.__setitem__('audacity', {**(aud or {}),'command':cmd}) if changed else None; (changed and json.dump(data, open(p,'w',encoding='utf-8'), indent=2)); print('WROTE' if changed else 'SKIP')" 2>/dev/null) || MERGE_RESULT="ERROR"
+
+        if [ "$MERGE_RESULT" = "WROTE" ]; then
+            chmod 600 "$CONFIG_FILE"
+            echo "  Configured Claude Desktop at: $CONFIG_FILE"
+        elif [ "$MERGE_RESULT" = "SKIP" ]; then
+            [ -f "$CONFIG_FILE.bak" ] && rm -f "$CONFIG_FILE.bak"
+            echo "  $CONFIG_FILE"
+            echo "  already correctly configured - skipping."
+        else
+            echo "  WARNING: could not update $CONFIG_FILE automatically."
+            echo "  Add this inside your \"mcpServers\" block by hand:"
+            echo ""
+            echo '    "audacity": {'
+            echo "      \"command\": \"$AUDACITY_MCP_CMD\""
+            echo '    }'
+        fi
     fi
 fi
 
