@@ -2,7 +2,7 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
-## [Unreleased]
+## [0.1.20] - 2026-08-04
 
 ### Label Tools: From "Create Only" to a Full Editing Workflow
 
@@ -18,6 +18,16 @@ The Labels category could create labels but not read an index, rename, delete, o
 **Testing:** `tests/test_label_tools.py` grew from 8 to 71 tests (suite total 92 → 161). Confirmed against a running Audacity: `label_delete`, `label_delete_audio_at`, `label_delete_regions`, `label_silence_regions`, `label_split_regions`, `label_join_regions`, `label_import`. Not yet independently live-tested: `label_cut_regions`, the new `LabelSounds` parameter names, and both export tools.
 
 **Docs:** added `PODCASTS.md` (linked from the README); notes that `transcribe_to_file(format="srt")` followed by `label_import` is a working alternative to `transcribe_to_labels`, since Audacity's own label importer reads SRT directly (its `txt`/`vtt` formats do not import cleanly today).
+
+### Repository Hardening: CI, Linting, and Contribution Safety
+
+None of this changes the package itself — it's entirely about making the repository harder to slip something bad into, whether careless or deliberate, before it ever reaches a release.
+
+- **Lint in CI**: added `ruff`, scoped deliberately to real bugs and security-relevant patterns (`F`/`S` rule categories) rather than style or formatting — runs once per CI pass rather than duplicated across the full OS/Python test matrix, since static analysis doesn't vary by platform. Cleaned up everything it found in the existing codebase (a handful of dead imports and harmless typos; nothing behavioral) so the check starts clean.
+- **Branch protection on `main`**: merging now requires every CI check to pass and at least one review — not enforced against the repo owner, so this only adds friction for outside contributions, not day-to-day maintenance.
+- **Dependabot**: enabled for both Python dependencies and GitHub Actions versions, plus automatic security-update PRs and vulnerability alerts.
+- **`SECURITY.md`** and GitHub's private vulnerability reporting: a documented, private channel for reporting a real vulnerability, instead of a public issue that advertises the hole before there's a fix.
+- Confirmed the existing CI workflow already used the safe `pull_request` trigger (not `pull_request_target`, a common misconfiguration that runs a fork's code with the base repo's secrets) and that no PyPI token is stored in the repo at all (Trusted Publishing via OIDC) — a malicious PR has nothing to steal and can't reach the publish pipeline regardless, since that only fires on a pushed version tag.
 
 ## [0.1.19] - 2026-08-01
 
