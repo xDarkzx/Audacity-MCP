@@ -6,6 +6,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/xDarkzx/Audacity-MCP/actions/workflows/ci.yml"><img src="https://github.com/xDarkzx/Audacity-MCP/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green.svg" alt="License" /></a>
   <a href="https://github.com/xDarkzx/Audacity-MCP/releases"><img src="https://img.shields.io/github/v/release/xDarkzx/Audacity-MCP" alt="Release" /></a>
