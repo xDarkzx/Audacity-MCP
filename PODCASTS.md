@@ -63,7 +63,14 @@ An hour-long interview, cut down for release:
 
 ## Known limitations
 
-- **`label_cut_regions` is not yet independently live-tested** against a running Audacity, unlike its siblings (`label_delete_regions`, `label_silence_regions`, `label_split_regions`, `label_join_regions`), which are.
+The following are not yet independently live-tested against a running Audacity — each is verified against the scripting reference and unit tests with mocked responses only, and each says so in its own docstring so it's visible at the point of use, not just here:
+
+- **`label_cut_regions`**, unlike its siblings (`label_delete_regions`, `label_silence_regions`, `label_split_regions`, `label_join_regions`), which are.
+- **`label_export_chapters`** and **`label_export_audio_segments`**.
+- **`analyze_label_sounds`'s new parameters** — `measurement`, `label_type`, `pre_offset`, `post_offset`, `label_text`. The three pre-existing parameters (`threshold_db`, `min_silence_duration`, `min_sound_duration`) predate this and are unaffected.
+
+Other known gaps:
+
 - **`label_export`'s track-combining behavior** (all label tracks flattened into one response) is a known gap, not yet fixed.
 - **Transcription tools are experimental** and need separate setup (`faster-whisper`, a downloaded model) — see the installation guide. Language auto-detection can occasionally misidentify short or noisy clips; pass `language` explicitly if you already know it.
 - **`label_delete_audio_at`'s track-resolution** assumes a project with one label track; behavior with multiple label tracks on the same edit is less exercised.

@@ -708,6 +708,9 @@ def register(mcp: FastMCP):
         per line), "cue" (cue sheet), "podlove" (Podlove Simple Chapters JSON).
         Labels with no text become "Chapter 1", "Chapter 2" and so on.
 
+        Not yet independently live-tested against a running Audacity — verified
+        against the scripting reference and unit tests with mocked responses only.
+
         Args:
             path: Absolute path for the output file (must not already exist)
             format: Chapter format — simple, cue or podlove. Default: simple
@@ -752,6 +755,9 @@ def register(mcp: FastMCP):
         Point labels (zero length) have no audio to export and are skipped.
         Existing files are never overwritten — they are skipped and reported.
         This can take a while for many or long segments.
+
+        Not yet independently live-tested against a running Audacity — verified
+        against the scripting reference and unit tests with mocked responses only.
 
         Args:
             directory: Absolute path to the output directory
