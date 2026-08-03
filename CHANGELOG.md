@@ -19,16 +19,15 @@ The Labels category could create labels but not read an index, rename, delete, o
 
 **Docs:** added `PODCASTS.md` (linked from the README); notes that `transcribe_to_file(format="srt")` followed by `label_import` is a working alternative to `transcribe_to_labels`, since Audacity's own label importer reads SRT directly (its `txt`/`vtt` formats do not import cleanly today).
 
-### CI, Linting, and Release Process Improvements
+### CI and Release Process Updates
 
-Standard process maturity as the project grows — none of this changes the package itself, and it's aimed at keeping the project reliable and easy to contribute to, not at any contributor's intent.
+None of this changes the package itself.
 
-- **Lint in CI**: added `ruff`, scoped to real bugs and security-relevant patterns (`F`/`S` rule categories) rather than style or formatting, so it gives fast, useful feedback without nitpicking anyone's formatting preferences — runs once per CI pass rather than duplicated across the full OS/Python test matrix, since static analysis doesn't vary by platform. Cleaned up everything it found in the existing codebase (a handful of dead imports and harmless typos; nothing behavioral) so the check starts clean for everyone.
-- **Branch protection on `main`**: merging now requires every CI check to pass and at least one review — the same standard workflow most established open-source projects use, so contributors get a clear, predictable bar for what "ready to merge" means.
-- **Dependabot**: enabled for both Python dependencies and GitHub Actions versions, plus automatic security-update PRs and vulnerability alerts, so the project stays current with upstream fixes automatically.
-- **`SECURITY.md`** and GitHub's private vulnerability reporting: gives anyone a clear, documented, private channel to responsibly report an issue.
-- Confirmed the existing CI setup already follows GitHub's recommended safe defaults (the `pull_request` trigger rather than `pull_request_target`, and Trusted Publishing via OIDC for PyPI with no stored token) — good practice already in place, now confirmed and documented.
-- GitHub Actions bumped to their latest majors (`checkout`, `setup-python` to v7; `upload-artifact` to v7; `download-artifact` to v8), keeping the build/publish pipeline current.
+- Added `ruff` to CI, scoped to the `F` (real bugs) and `S` (security-relevant patterns) rule categories, not style or formatting. Runs once per CI pass rather than duplicated across the OS/Python test matrix, since static analysis doesn't vary by platform.
+- Branch protection on `main`: merging requires CI to pass and at least one review.
+- Dependabot enabled for Python dependencies and GitHub Actions versions, with automatic security-update PRs and vulnerability alerts.
+- Added `SECURITY.md` and enabled GitHub's private vulnerability reporting.
+- GitHub Actions bumped to their latest majors: `checkout` and `setup-python` to v7, `upload-artifact` to v7, `download-artifact` to v8.
 
 ## [0.1.19] - 2026-08-01
 
