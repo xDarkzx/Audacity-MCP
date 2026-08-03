@@ -68,6 +68,12 @@ def register(mcp: FastMCP):
         passage of sound, or with label_type="between" label the silences
         instead so they can be trimmed with label_delete_regions.
 
+        measurement, label_type, pre_offset, post_offset and label_text are new
+        and not yet independently live-tested against a running Audacity —
+        verified against the scripting reference and unit tests with mocked
+        responses only. threshold_db/min_silence_duration/min_sound_duration
+        predate this and are unaffected.
+
         Args:
             threshold_db: Volume threshold to distinguish sound from silence (dB). Default: -30
             min_silence_duration: Minimum duration of silence between sounds (seconds). Default: 0.5
