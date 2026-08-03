@@ -12,9 +12,10 @@ A podcast or interview recording is usually edited by working through it segment
 
 ### 1. Get segment markers onto the timeline
 
-- **`transcribe_to_labels`** *(experimental, requires separate faster-whisper setup — see the installation guide)* — transcribes the project audio and drops one label per spoken segment, with the transcribed text as the label's text. This is the main entry point for transcript-based editing: after this call, `label_list` shows you the whole recording as a list of "sentence → time range" entries.
+- **`transcribe_to_labels`** *(experimental, requires separate faster-whisper setup — see the installation guide)* — transcribes the project audio and drops one label per spoken segment, with the transcribed text as the label's text. This is the direct entry point for transcript-based editing: after this call, `label_list` shows you the whole recording as a list of "sentence → time range" entries.
+- **`transcribe_to_file(path, format="srt")` followed by `label_import(path)`** may work better in practice: `transcribe_to_file` writes an SRT file, and Audacity's own **Import > Labels** has been confirmed to read SRT directly — so this two-step path gets you the same segment-labeled timeline as `transcribe_to_labels`, just via an intermediate file instead of one direct call. `vtt`/`txt` are also offered by `transcribe_to_file`, but `txt` today is plain concatenated text with no timestamps at all, so it isn't importable as labels — use `srt`.
 - **`analyze_label_sounds`** — an alternative when you want segment boundaries without needing the words: labels every passage of sound separated by silence (`label_type="before"`/`"after"`/`"around"`), or the silences themselves (`label_type="between"`, useful for finding dead air to trim). Tunable via `threshold_db`, `min_silence_duration`, `min_sound_duration`, `measurement` (peak/avg/rms), and `pre_offset`/`post_offset` to pad each label.
-- Related but not label-producing: `transcribe_audio`/`transcribe_selection` (transcript only), `transcribe_to_file` (SRT/VTT/TXT export).
+- Related but not label-producing on their own: `transcribe_audio`/`transcribe_selection` (transcript only, no file or labels).
 
 ### 2. Read and search the labels
 

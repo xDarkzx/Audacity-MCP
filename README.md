@@ -543,6 +543,7 @@ Your support helps keep this project maintained and free for everyone.
 
 - **[Installation Guide](docs/INSTALLATION.md)** — Detailed setup for Windows, macOS, Linux
 - **[Tool Reference](docs/TOOLS.md)** — Complete reference for all 144 tools with parameters and ranges
+- **[Transcript-Based Editing](PODCASTS.md)** — Workflow guide for podcasts, interviews, and lectures (label-driven editing)
 - **[Contributing](CONTRIBUTING.md)** — How to add tools and contribute
 - **[Changelog](CHANGELOG.md)** — Version history and release notes
 
