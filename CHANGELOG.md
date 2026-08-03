@@ -2,6 +2,23 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [Unreleased]
+
+### Label Tools: From "Create Only" to a Full Editing Workflow
+
+The Labels category could create labels but not read an index, rename, delete, or act on the audio underneath one. 13 new tools (131 → 144), no changes to existing tool behavior. See [PODCASTS.md](PODCASTS.md) for the transcript-based editing workflow (podcasts, interviews, lectures) this was built around — worth reading if that's not your use case, since it explains where these tools do and don't apply.
+
+- **Read, search, edit:** `label_list` / `label_find` return parsed labels with the flat index `label_edit`/`label_delete` need; `label_edit` updates only the fields passed; `label_add_batch` validates a whole batch (up to 500) before sending anything, so one bad item can't leave a half-written list.
+- **Delete a label without touching audio:** `label_delete` — Audacity has no "delete label N" command, so this selects the label's own span on its own track and split-deletes it, restoring any other label caught as collateral in the same region.
+- **Delete one labeled take's audio by index:** `label_delete_audio_at` — deletes the audio under one label and clears the leftover marker it leaves behind. A custom composite (`SelAllTracks` → `SelectTime` → `Delete`/`SplitDelete` → cleanup), since Audacity has no single command for it. Originally named `label_delete_region`; renamed after live testing confirmed correct behavior but flagged the name as one letter from `label_delete_regions` below despite doing something different (by-index vs. by-selection).
+- **Act on every labeled region in the current selection:** `label_cut_regions`, `label_delete_regions`, `label_silence_regions`, `label_split_regions`, `label_join_regions` — thin wrappers over Audacity's own labeled-region commands.
+- **Export:** `label_export_chapters` (simple/cue/Podlove chapter formats) and `label_export_audio_segments` (per-label audio files, skipping point labels and never overwriting existing files).
+- **`analyze_label_sounds`** now exposes all 8 `LabelSounds` parameters (previously 3): `measurement`, `label_type`, `pre_offset`, `post_offset`, `label_text`. Only sent when explicitly passed, so existing calls are unaffected. Open question worth checking before merge: the scripting reference documents `threshold`/`sil-dur`/`snd-dur`, but the three pre-existing parameters are sent as `Threshold`/`MinSilence`/`MinSound` — left as-is since it's a working call, but the duration parameters may never have reached Audacity if the documented names are the real ones.
+
+**Testing:** `tests/test_label_tools.py` grew from 8 to 71 tests (suite total 92 → 161). Confirmed against a running Audacity: `label_delete`, `label_delete_audio_at`, `label_delete_regions`, `label_silence_regions`, `label_split_regions`, `label_join_regions`, `label_import`. Not yet independently live-tested: `label_cut_regions`, the new `LabelSounds` parameter names, and both export tools.
+
+**Docs:** added `PODCASTS.md` (linked from the README); notes that `transcribe_to_file(format="srt")` followed by `label_import` is a working alternative to `transcribe_to_labels`, since Audacity's own label importer reads SRT directly (its `txt`/`vtt` formats do not import cleanly today).
+
 ## [0.1.19] - 2026-08-01
 
 ### install.bat: `goto` Out of an if/else Block Silently Corrupted Script Flow

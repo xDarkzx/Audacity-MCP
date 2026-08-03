@@ -1,5 +1,10 @@
 import os
 from mcp.server.fastmcp import FastMCP
+from audacity_mcp_shared.constants import (
+    LABEL_SOUNDS_MEASUREMENTS,
+    LABEL_SOUNDS_TYPES,
+    MAX_LABEL_LENGTH,
+)
 from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
 
 
@@ -51,16 +56,74 @@ def register(mcp: FastMCP):
         threshold_db: float = -30.0,
         min_silence_duration: float = 0.5,
         min_sound_duration: float = 0.1,
+        measurement: str = "peak",
+        label_type: str = "before",
+        pre_offset: float = 0.0,
+        post_offset: float = 0.0,
+        label_text: str = "",
     ) -> dict:
         """Automatically label regions of sound separated by silence.
+
+        A good starting point for segmenting a long recording: label every
+        passage of sound, or with label_type="between" label the silences
+        instead so they can be trimmed with label_delete_regions.
+
+        measurement, label_type, pre_offset, post_offset and label_text are new
+        and not yet independently live-tested against a running Audacity —
+        verified against the scripting reference and unit tests with mocked
+        responses only. threshold_db/min_silence_duration/min_sound_duration
+        predate this and are unaffected.
 
         Args:
             threshold_db: Volume threshold to distinguish sound from silence (dB). Default: -30
             min_silence_duration: Minimum duration of silence between sounds (seconds). Default: 0.5
             min_sound_duration: Minimum duration of a sound region (seconds). Default: 0.1
+            measurement: How level is measured — peak, avg or rms. Default: peak
+            label_type: What to label — before, after, around or between the sounds. Default: before
+            pre_offset: Seconds to extend each label before the sound starts. Default: 0
+            post_offset: Seconds to extend each label after the sound ends. Default: 0
+            label_text: Text for each label. Default: Audacity's own default
         """
+        if measurement not in LABEL_SOUNDS_MEASUREMENTS:
+            raise AudacityMCPError(
+                ErrorCode.INVALID_PARAMETER,
+                f"measurement must be one of {sorted(LABEL_SOUNDS_MEASUREMENTS)}")
+        if label_type not in LABEL_SOUNDS_TYPES:
+            raise AudacityMCPError(
+                ErrorCode.INVALID_PARAMETER,
+                f"label_type must be one of {sorted(LABEL_SOUNDS_TYPES)}")
+        if min_silence_duration < 0 or min_sound_duration < 0:
+            raise AudacityMCPError(
+                ErrorCode.VALUE_OUT_OF_RANGE,
+                "min_silence_duration and min_sound_duration must be >= 0")
+        if not 0 <= pre_offset <= 3600 or not 0 <= post_offset <= 3600:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE,
+                                   "pre_offset and post_offset must be 0-3600 seconds")
+        if len(label_text) > MAX_LABEL_LENGTH:
+            raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE,
+                                   f"Label text too long (max {MAX_LABEL_LENGTH})")
+
+        # Only send a parameter that was actually asked for. Sending all of them
+        # unconditionally changed the wire call for every existing caller, and
+        # an unrecognised name is enough to make the whole command misbehave -
+        # exactly the risk this tool already carries with Threshold/MinSilence/
+        # MinSound (see CHANGELOG). Defaults here match Audacity's own, so
+        # omitting them leaves the call as it was before these were exposed.
+        extra_params = {}
+        if measurement != "peak":
+            extra_params["measurement"] = measurement
+        if label_type != "before":
+            extra_params["type"] = label_type
+        if pre_offset:
+            extra_params["pre-offset"] = pre_offset
+        if post_offset:
+            extra_params["post-offset"] = post_offset
+        if label_text:
+            extra_params["text"] = label_text
+
         return await client.execute_long(
             "LabelSounds",
+            extra_params=extra_params or None,
             Threshold=threshold_db,
             MinSilence=min_silence_duration,
             MinSound=min_sound_duration,

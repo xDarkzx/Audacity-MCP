@@ -17,7 +17,7 @@ class TestToolRegistration:
 
         # Access internal tool manager directly to avoid async list_tools
         tool_count = len(mcp._tool_manager._tools)
-        assert tool_count >= 131, f"Expected at least 131 tools, got {tool_count}"
+        assert tool_count >= 144, f"Expected at least 144 tools, got {tool_count}"
 
 
 class TestValidation:
@@ -63,6 +63,79 @@ class TestPathSafety:
         with pytest.raises(AudacityMCPError) as exc_info:
             _safe_path(r"C:\Windows\System32\evil.wav")
         assert exc_info.value.code == ErrorCode.INVALID_PATH
+
+
+class TestAnalyzeLabelSounds:
+    @pytest.fixture
+    def tools(self):
+        mcp = FastMCP("TestAnalysis")
+        self.client = MagicMock()
+        self.client.execute = AsyncMock(return_value={"success": True, "raw": "", "message": "", "data": {}})
+        self.client.execute_long = AsyncMock(return_value={"success": True, "raw": "", "message": "", "data": {}})
+        with patch("audacity_mcp.main.client", self.client):
+            from audacity_mcp.tools.analysis_tools import register
+            register(mcp)
+        return mcp._tool_manager._tools
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_defaults_send_nothing_extra_at_all(self, tools):
+        # Regression: sending the new parameters unconditionally changed the
+        # wire call for every existing caller. A default call must look exactly
+        # as it did before they were exposed.
+        from audacity_mcp_shared.pipe_protocol import format_command
+        await tools["analyze_label_sounds"].fn()
+        call = self.client.execute_long.call_args
+        assert call.args[0] == "LabelSounds"
+        assert call.kwargs["extra_params"] is None
+        assert (format_command("LabelSounds", **{k: v for k, v in call.kwargs.items()
+                                                 if k != "extra_params"})
+                == "LabelSounds: Threshold=-30.0 MinSilence=0.5 MinSound=0.1\n")
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_hyphenated_params_go_through_extra_params(self, tools):
+        # pre-offset/post-offset aren't valid Python identifiers, so they can
+        # only reach Audacity via extra_params.
+        await tools["analyze_label_sounds"].fn(
+            measurement="rms", label_type="between",
+            pre_offset=0.25, post_offset=0.5, label_text="Speech")
+        extra = self.client.execute_long.call_args.kwargs["extra_params"]
+        assert extra == {
+            "measurement": "rms",
+            "type": "between",
+            "pre-offset": 0.25,
+            "post-offset": 0.5,
+            "text": "Speech",
+        }
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_only_the_parameters_asked_for_are_sent(self, tools):
+        await tools["analyze_label_sounds"].fn(label_type="between")
+        assert self.client.execute_long.call_args.kwargs["extra_params"] == {"type": "between"}
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_invalid_enums_rejected(self, tools):
+        with pytest.raises(AudacityMCPError) as exc:
+            await tools["analyze_label_sounds"].fn(measurement="loudest")
+        assert exc.value.code == ErrorCode.INVALID_PARAMETER
+        with pytest.raises(AudacityMCPError) as exc:
+            await tools["analyze_label_sounds"].fn(label_type="sideways")
+        assert exc.value.code == ErrorCode.INVALID_PARAMETER
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_out_of_range_values_rejected(self, tools):
+        with pytest.raises(AudacityMCPError) as exc:
+            await tools["analyze_label_sounds"].fn(pre_offset=99999)
+        assert exc.value.code == ErrorCode.VALUE_OUT_OF_RANGE
+        with pytest.raises(AudacityMCPError) as exc:
+            await tools["analyze_label_sounds"].fn(min_sound_duration=-1)
+        assert exc.value.code == ErrorCode.VALUE_OUT_OF_RANGE
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_zero_duration_still_allowed(self, tools):
+        # 0 means "no minimum" and is Audacity's own default — rejecting it
+        # would break callers that were passing it before.
+        await tools["analyze_label_sounds"].fn(min_sound_duration=0, min_silence_duration=0)
+        assert self.client.execute_long.call_args.kwargs["MinSound"] == 0
 
 
 class TestEffectValidation:
