@@ -11,6 +11,7 @@
   <a href="https://github.com/xDarkzx/Audacity-MCP/releases"><img src="https://img.shields.io/github/v/release/xDarkzx/Audacity-MCP" alt="Release" /></a>
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-compatible-purple.svg" alt="MCP Compatible" /></a>
   <a href="https://discord.gg/BGn8Ujh37m"><img src="https://img.shields.io/discord/1530363483701510154?label=discord&logo=discord&color=5865F2" alt="Discord" /></a>
+  <a href="https://github.com/sponsors/xDarkzx"><img src="https://img.shields.io/badge/Sponsor-30363D?logo=githubsponsors&logoColor=EA4AAA" alt="Sponsor" /></a>
 </p>
 
 <p align="center">
@@ -23,11 +24,11 @@
 
 ---
 
-AudacityMCP connects any MCP-compatible AI assistant to [Audacity](https://www.audacityteam.org/), giving it full control over audio editing through 131 tools spanning effects, cleanup, mastering, transcription, and more. Talk to your AI assistant and it edits your audio in real-time.
+AudacityMCP connects any MCP-compatible AI assistant to [Audacity](https://www.audacityteam.org/), giving it full control over audio editing through 144 tools spanning effects, cleanup, mastering, transcription, and more. Talk to your AI assistant and it edits your audio in real-time.
 
 **No cloud. No API keys for audio processing. Everything runs locally through Audacity's named pipe interface.**
 
-**If this is useful to you, a star helps other people find it** — that's the whole marketing budget for this project.
+**If this is useful to you, a star helps other people find it** — that's the whole marketing budget for this project. Want to help keep it maintained? Click the **Sponsor** badge up top.
 
 > **Compatibility:** AudacityMCP currently works with **Audacity 3.x** only. Audacity 4.x is not yet supported — we hope to add support in the future.
 
@@ -67,12 +68,14 @@ cd Audacity-MCP
 bash install.sh
 ```
 
-> The installer does 3 things: installs `audacity-mcp` from PyPI, enables mod-script-pipe in Audacity, and **configures Claude Desktop** — no manual JSON editing needed.
+> The installer does 3 things: installs `audacity-mcp` from **this local folder** (the one you just downloaded/cloned — no PyPI or GitHub fetch involved), enables mod-script-pipe in Audacity, and **configures Claude Desktop** — no manual JSON editing needed. It asks for confirmation before touching either config file, explains exactly what it's about to do first, and always backs up an existing file before changing it. Want to see everything it would do without changing anything? Add `--dry-run`: `.\install.bat --dry-run` / `bash install.sh --dry-run`.
+>
+> Note: `install.bat`/`install.sh` must be run from inside this folder — they only install the code sitting right next to them, they don't download anything themselves.
 
 <details>
 <summary>Other MCP clients (Cursor, Claude Code, etc.)</summary>
 
-If you're not using Claude Desktop, install manually with `pip install audacity-mcp` and add to your client's MCP config:
+If you're not using Claude Desktop, install manually with `pip install audacity-mcp-server` and add to your client's MCP config:
 
 ```json
 {
@@ -85,6 +88,35 @@ If you're not using Claude Desktop, install manually with `pip install audacity-
 ```
 
 Check your client's MCP documentation for the config file location.
+
+> **Client can't find/run `audacity-mcp`?** GUI apps don't always see the same PATH a terminal does. Run `python -c "import sysconfig; print(sysconfig.get_path('scripts'))"` and use the full path it prints (plus `\audacity-mcp.exe` on Windows or `/audacity-mcp` on macOS/Linux) as `"command"` instead of the bare name.
+
+</details>
+
+<details>
+<summary>Prefer not to run a script at all? Full manual setup</summary>
+
+No `install.bat`/`install.sh`, nothing touching your system automatically — three steps, all done by hand:
+
+1. **Enable mod-script-pipe in Audacity**: Edit → Preferences (Windows/Linux) or Audacity → Preferences (macOS) → Modules → set `mod-script-pipe` to Enabled → OK → restart Audacity.
+2. **Install the package**: open a terminal (Command Prompt/PowerShell on Windows, Terminal on macOS/Linux) and run `pip install audacity-mcp-server` — a normal PyPI install, no repo clone needed.
+3. **Configure Claude Desktop**: open Claude Desktop → Settings (gear icon) → Developer tab → Edit Config — this opens `claude_desktop_config.json` in a text editor. Add this inside the `"mcpServers"` block, keeping any other servers you already have:
+
+   ```json
+   {
+     "mcpServers": {
+       "audacity": {
+         "command": "audacity-mcp"
+       }
+     }
+   }
+   ```
+
+   Save the file and **fully restart Claude Desktop** (quit from the system tray, not just close the window).
+
+That's the entire install — see the [Installation Guide](docs/INSTALLATION.md) for the same steps with more detail and per-OS notes.
+
+> **`"audacity"` doesn't show up as a tool after restarting?** The `"command": "audacity-mcp"` above only works if that command is on the same PATH Claude Desktop itself uses, which isn't always the case (especially if Claude Desktop was already open when you installed Python). If it doesn't connect, run this in a terminal to find the real install location: `python -c "import sysconfig; print(sysconfig.get_path('scripts'))"` — then replace `"audacity-mcp"` above with the full path it prints plus `\audacity-mcp.exe` (Windows, remember to double every backslash: `\\`) or `/audacity-mcp` (macOS/Linux).
 
 </details>
 
@@ -149,7 +181,7 @@ AI:   select region → reverb effect → export to FLAC
 
 ## Features
 
-### 131 Tools Across 11 Categories
+### 144 Tools Across 11 Categories
 
 | Category | Tools | Highlights |
 |----------|-------|------------|
@@ -163,7 +195,7 @@ AI:   select region → reverb effect → export to FLAC
 | **Analysis** | 6 | Contrast, clipping detection, spectrum, beat finder, sound labeling |
 | **Generation** | 5 | Tone, noise, chirp, DTMF, rhythm track |
 | **Transcription** (Experimental) | 7 | Full/selection transcribe, to labels, to SRT/VTT/TXT, model preload |
-| **Labels** | 6 | Add, add at time, get all, edit, import/export |
+| **Labels** | 19 | List/find/edit/delete, delete one labeled take's audio by index, batch add, cut/delete/silence labeled regions, marker export (simple/cue/Podlove), per-segment audio export, import/export |
 
 ---
 
@@ -383,6 +415,7 @@ The installer enables this automatically, but if it didn't work (e.g. Audacity w
 | Pipes missing in /tmp (macOS/Linux) | Check Audacity is running and mod-script-pipe is enabled. Check Audacity's console for errors. |
 | Using Snap or Flatpak Audacity on Linux | Both sandbox `/tmp`, so AudacityMCP auto-detects the real pipe location inside Audacity's mount namespace — no setup needed. If auto-detection fails (containers, restrictive ptrace policies, unusual sandboxing), set the `AUDACITY_PIPE_DIR` environment variable to the directory holding the pipes and it'll be used directly. |
 | Installer says "Audacity config not found" but Audacity definitely runs | If you're running a **portable** Audacity (a `Portable Settings` folder next to the executable), it keeps `audacity.cfg` there instead of the normal per-OS location, so the installer can't find it. Enable `mod-script-pipe` manually instead (Preferences → Modules). |
+| `install.bat` said it configured Claude Desktop, but Audacity never shows up as a tool | Claude Desktop installed via the **Microsoft Store** redirects its config into an isolated per-package folder — older `install.bat` versions only wrote to the standard `%APPDATA%\Claude\` path, which the Store build never reads | Update to the latest `install.bat` and re-run it, or add the config yourself via Claude Desktop → Settings → Developer → Edit Config (see [Installation Guide](docs/INSTALLATION.md#claude-desktop)) — that always opens the correct file regardless of install type |
 
 ---
 
@@ -494,11 +527,11 @@ Turning this into a tool every Audacity user reaches for takes more than one per
 
 ## Support
 
-If AudacityMCP has saved you time or helped with your audio projects, consider buying me a coffee:
+If AudacityMCP has saved you time or helped with your audio projects, consider sponsoring:
 
 <p align="center">
-  <a href="https://buymeacoffee.com/xdarkzx">
-    <img src="https://img.shields.io/badge/Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee" />
+  <a href="https://github.com/sponsors/xDarkzx">
+    <img src="https://img.shields.io/badge/Sponsor-30363D?style=for-the-badge&logo=githubsponsors&logoColor=EA4AAA" alt="GitHub Sponsors" />
   </a>
 </p>
 
@@ -509,7 +542,8 @@ Your support helps keep this project maintained and free for everyone.
 ## Documentation
 
 - **[Installation Guide](docs/INSTALLATION.md)** — Detailed setup for Windows, macOS, Linux
-- **[Tool Reference](docs/TOOLS.md)** — Complete reference for all 131 tools with parameters and ranges
+- **[Tool Reference](docs/TOOLS.md)** — Complete reference for all 144 tools with parameters and ranges
+- **[Transcript-Based Editing](PODCASTS.md)** — Workflow guide for podcasts, interviews, and lectures (label-driven editing)
 - **[Contributing](CONTRIBUTING.md)** — How to add tools and contribute
 - **[Changelog](CHANGELOG.md)** — Version history and release notes
 

@@ -2,6 +2,123 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [Unreleased]
+
+### Working With Labels, Not Just Creating Them
+
+The Labels category could create labels but barely do anything with them: no way to read a label's index, rename one, delete one, or act on the audio underneath. Labels are how you mark up a long recording, so anything driven by those marks — trimming bad takes, redacting a section, exporting chapter markers, splitting a recording into per-segment files — had no path through the server at all. 13 new tools (131 → 144), no changes to existing tool behavior.
+
+**Reading and editing labels.** `label_get_all` returned Audacity's raw `GetInfo` blob with the label JSON unparsed in `["message"]`, so nothing downstream could act on a specific label.
+
+- `label_list` returns parsed labels with the flat index `SetLabel` expects, `label_find` searches their text case-insensitively.
+- `label_edit` wraps `SetLabel`, sending only the fields passed so a rename can't silently move a boundary. `label_add_batch` adds a whole marker list in one call, validating every item before sending anything so a bad item can't leave a half-written list behind.
+- Internals: `count_existing_labels()` grew a sibling, `get_parsed_labels()`, which does the same version-agnostic JSON walk but keeps each label's timing, text and owning track ordinal. `count_existing_labels()` is now a `len()` over it, so the 0.1.13 index fix and everything built on it (including the transcription labeling loop) keeps working unchanged.
+
+**Deleting a single label.** Audacity has no scripting command for this — `DeleteLabels` deletes the *audio* under labels, which is a different operation entirely.
+
+- `label_delete` selects the label's own span on its own label track (via `GetInfo Type=Tracks` to map the label's track ordinal to the absolute track index `SelectTracks` wants) and issues `SplitDelete`. Audio tracks are never in the selection, so nothing shifts in time.
+- Labels on the same track sitting entirely inside the deleted span would be collateral damage, so they are captured beforehand and re-added afterwards. A label that only *partially* overlaps may be trimmed to the boundary — documented in the docstring rather than silently papered over.
+- The tool re-reads the label list afterwards and returns `success: false` if the count didn't actually drop, rather than reporting a delete that never happened.
+
+**Acting on labeled audio.** Five thin wrappers over the labeled-region menu commands: `label_cut_regions` (`CutLabels`), `label_delete_regions` (`DeleteLabels`), `label_silence_regions` (`SilenceLabels`), `label_split_regions` (`SplitLabels`), `label_join_regions` (`JoinLabels`). Label the unwanted stretches and remove them in one pass; label a section and silence it without shortening the material. Every docstring states that these act on the *selected audio tracks* — the most likely way to misuse them is to forget the selection step. `CopyLabels`, `SplitCutLabels`, `SplitDeleteLabels` and `DisjoinLabels` were deliberately left out: near-duplicate verbs that would dilute tool selection for little gain, and easy to add if anyone asks.
+
+`label_delete_audio_at` covers the single-label case those five can't: it resolves one label's span, selects it, and issues `Delete` (gap closes, later audio shifts left) or `SplitDelete` (timeline length preserved) via `close_gap`. All tracks are selected first so label tracks ripple with the audio and later labels stay aligned — scoping the selection to audio tracks only is what silently desyncs every subsequent label from its audio. Point labels have no audio underneath and are rejected rather than silently doing nothing. This tool is a custom composite built for podcast/transcript-based editing rather than a 1:1 wrapper over a single Audacity command — Audacity has no "delete this one labeled take" verb, so it orchestrates `SelAllTracks` → `SelectTime` → `Delete`/`SplitDelete` → leftover-marker cleanup as one call.
+
+Deleting the audio does **not** remove the label: it collapses to a zero-length marker sitting where the audio used to be, which is not what clicking a label and pressing Delete does in Audacity — there, the audio and the label both go. So `label_delete_audio_at` clears that leftover as a final step (`delete_label=True`, the default), sharing the same `remove_label()` routine `label_delete` uses rather than duplicating it. The leftover is located by identity — matching text at the start of the cut — rather than by its original index, so it is still found when the delete shifts other labels around. Finding no leftover means this Audacity dropped the label with its audio, which is the same end state, and is reported as removed rather than as a problem.
+
+This tool was originally named `label_delete_region` — one letter from `label_delete_regions`, the bulk/selection-based tool above, despite working by index on a single label rather than by selection across every label. Live testing against a running Audacity confirmed the behavior of both was correct, but the name collision itself was the real usability problem: the two are easy to reach for interchangeably by mistake, and no amount of docstring detail fixes a name that reads the same at a glance. Renamed to `label_delete_audio_at` so the name alone carries the two things that distinguish it — deletes *audio* (unlike `label_delete`, marker-only) *at* a specific index (unlike `label_delete_regions`, selection-based).
+
+Note on the wording for the region tools: `label_silence_regions`, `label_split_regions` and `label_join_regions` leave the timeline length alone, so the labels genuinely stay put. `label_cut_regions` and `label_delete_regions` close the timeline up, so a labeled region collapses rather than surviving unchanged — their docstrings say so and point at `label_list` for confirming what remains, instead of claiming the labels are untouched.
+
+**Getting labelled work back out.**
+
+- `label_export_chapters` writes labels as a standard marker file: simple chapters (`HH:MM:SS.mmm Title`), a cue sheet, or Podlove Simple Chapters JSON. Pure Python off the parsed labels, so it needs no extra Audacity round trips.
+- `label_export_audio_segments` exports the audio under each label as its own file, named from the label text. Point labels are skipped (no audio to export), existing files are never overwritten, and both are reported back rather than passed over in silence.
+
+**`analyze_label_sounds` now exposes all of `LabelSounds`.** It only passed 3 of the plugin's 8 parameters. Added `measurement`, `label_type`, `pre_offset`, `post_offset` and `label_text`. `label_type="between"` labels the silences instead of the sounds, which pairs directly with `label_delete_regions` for trimming dead air out of a long recording. The hyphenated names (`pre-offset`, `post-offset`) aren't valid Python identifiers and go through `client.execute`'s existing `extra_params` dict.
+
+A parameter is only sent when it was actually asked for. The first cut of this sent all five on every call, which changed the wire call for every existing caller — precisely the thing this entry claimed it did not do. Defaults here match Audacity's own, so a default call goes out as `LabelSounds: Threshold= MinSilence= MinSound=`, exactly as before these were exposed, and an unrecognised parameter name can only affect a caller who explicitly opted in.
+
+- **Worth a look while smoke-testing:** the three pre-existing parameters are sent as `Threshold`/`MinSilence`/`MinSound`, but the scripting reference documents `LabelSounds` as taking `threshold`/`sil-dur`/`snd-dur`. If the documented names are the real ones, the two duration parameters have never reached Audacity and it has been silently using its own defaults. Left alone here rather than changed blind — correcting a working call on a guess is the worse failure mode, and this belongs in its own fix once someone can confirm against a running Audacity.
+
+Deleting a label is region-based — Audacity has no "delete label N" command, so the label's own span is selected and split-deleted. That leaves zero-width point labels with nothing to select, so they are given a width via `SetLabel` first and then deleted like any other label, rather than trying to make a region delete catch something with no width. This matters most for `label_delete_audio_at`'s cleanup, whose target is always a freshly collapsed label.
+
+When a removal does fail, the payload carries Audacity's own reply to each command (`success`, `message`, `raw`) under `audacity_responses`, plus the region selected and whether the target was widened. The tool states what it observed — the label count did not drop — and leaves the diagnosis to Audacity's output rather than guessing at causes.
+
+**Testing.** `tests/test_label_tools.py` grew from 8 to 71 tests; suite total 92 → 161. Covers the parser across both `GetInfo` schemas, per-tool validation, exact command sequences for `label_delete` (including point-label widening and the collateral re-add), the chapter formatters as pure functions, and the export tools against `tmp_path`.
+
+- **Confirmed against a running Audacity:** `label_delete_audio_at` end to end — the gap-closing `Delete` across all tracks, the label surviving as a zero-width marker rather than being removed with its audio, locating that marker, widening it via `SetLabel`, and clearing it with `SelectTracks` + `SelectTime` + `SplitDelete`. That last part also confirms the mechanism `label_delete` is built on: a region split-delete on a label track does remove labels. Getting there took three corrections, each from reasoning about Audacity's behavior instead of observing it — the epsilon region for zero-width labels never worked, and no amount of unit testing with mocked responses would have caught it. Live testing also confirmed `label_delete`, `label_delete_regions`, `label_silence_regions`, `label_split_regions` and `label_join_regions` all behave as documented, and that `label_import` works the same as in the origin project.
+- **Still not observed against a live Audacity** — `label_cut_regions`, the new `LabelSounds` parameter names, the collateral re-add path when labels on a track overlap, resolving the owning track in projects with more than one label track, and both export tools. These rest on the scripting reference and mocked unit tests, the same footing the point-label handling had before it turned out to be wrong. Treat them as likely to need correction rather than probably fine.
+
+## [0.1.19] - 2026-08-01
+
+### install.bat: `goto` Out of an if/else Block Silently Corrupted Script Flow
+
+Found while adding better error logging to `install.bat`: a real, serious bug that has been present since the "Configure Claude Desktop now? (y/n)" prompt was first added in v0.1.16.
+
+- **Root cause**: `goto` cannot safely jump out of the middle of an `if (...) else (...)` compound statement in cmd.exe. The interpreter parses the whole if/else as one unit, and a `goto` escaping mid-way corrupts its parse state - subsequent lines can be silently skipped, duplicated, or executed out of order, with no error shown. Three places in `install.bat` did exactly this: the winget-install-failure path, the pip-install-failure path (both added today), and the "answered n to Configure Claude Desktop now?" path (present since v0.1.16). **The last one means answering "n" could have been silently ignored and the config touched anyway** - the opposite of what was asked for.
+- Caught it concretely: added a diagnostic log file + "report this" message on every failure path (see below), tested the failure path in isolation, and found the script printed the error then barreled straight through the remaining steps to "SETUP COMPLETE" instead of stopping.
+- **Fix**: every one of these now sets a plain flag variable inside the block instead of calling `goto` from within it, then checks that flag in a standalone statement immediately after the if/else closes (goto is only safe once execution is back at the top level, outside any block). Audited every remaining `goto` in the file - all others target labels from inside a plain `if (...)` with no accompanying `else`, which is safe.
+- `install.sh` was never affected - bash doesn't have this pitfall, and its equivalent uses a real function call (`fail_exit()`), not a label jump.
+
+### Better Error Visibility (Both Installers)
+
+Prompted by an install failure report and the suspicion that more people silently give up than report bugs.
+
+- Both scripts now write a log (`install-log.txt`, next to the script, overwritten each run) capturing Python version, each step reached, the resolved `audacity-mcp` command, and the Claude Desktop config merge result for every config file touched.
+- Every failure path now prints where the log is and a link to file an issue with it attached, instead of just an error message and a dead end.
+
+### Follow-up fix (same release): Claude Desktop Config Merge Was Silently Failing
+
+Testing the above surfaced a second bug in the same code path, caught and fixed before wider use: the JSON merge logic was still passed to Python as one long `-c "..."` command-line string, and combined with the new `2>>"logfile"` stderr-capture redirect above, cmd.exe's naive same-line paren scanner corrupted the string being executed, producing a `SyntaxError` instead of running the merge. Separately, the merge logic itself had `cmd != 'audacity-mcp'` silently lose its `!` to `setlocal enabledelayedexpansion` (the same character-eating issue as `installed successfully!` elsewhere in this file), turning it into an assignment instead of a comparison. The fallback message shown on a genuine failure also hardcoded the broken bare `"audacity-mcp"` command instead of the real resolved path.
+
+- **Fix**: the merge logic now lives in a real temporary `.py` file (`%TEMP%\audacity_mcp_merge_config.py`), invoked as `python "file.py"` instead of an inline one-liner - removing almost everything that could trip cmd's parser. The `!=` was rewritten as `not (... == ...)` to avoid the delayed-expansion pitfall entirely. The fallback message now shows the real resolved path. Failures capture Python's actual traceback into `install-log.txt`, and mention that a running Claude Desktop holding the file open is a common cause.
+- **Verified against the real system**: ran the fixed installer against this machine's actual multi-server Claude Desktop config (both the standard and Microsoft Store paths, one with unrelated app-internal keys alongside `mcpServers`) with Claude Desktop open. Confirmed the `audacity` entry was correctly upgraded to the resolved path on both files, every other configured server and every unrelated top-level key was byte-for-byte untouched, and `.bak` backups were created. Also verified the "answered n" decline path leaves the file byte-for-byte untouched (checksum-verified) and the malformed-JSON error path produces a real captured traceback.
+
+## [0.1.18] - 2026-08-01
+
+### Claude Desktop Shows No Servers: Bare `"audacity-mcp"` Command Not Resolvable
+
+A user reported Claude Desktop showed no MCP servers at all after installing, even though the config file had a correctly-formed `"audacity"` entry with `"command": "audacity-mcp"`.
+
+- **Root cause**: that bare command relies on `audacity-mcp.exe`'s folder being on PATH for whatever process launches it. A terminal can resolve it fine (`where audacity-mcp` succeeds) while Claude Desktop — a GUI app that can be running with a PATH cached from before Python/pip were installed, or simply launched in an environment that doesn't inherit the same PATH as a freshly opened terminal — fails to spawn it, silently. Since Audacity was this user's only configured server, "no servers show" and "Audacity fails to spawn" were the same event.
+- **Fix**: both installers now resolve the actual installed script's absolute path via the target Python's own `sysconfig.get_path('scripts')` (authoritative regardless of PATH) and write that full path into the Claude Desktop config instead of a bare `"audacity-mcp"` string — eliminating the PATH dependency for Claude Desktop's process entirely.
+- **Also fixes existing broken installs, not just new ones**: config writing switched from crude `findstr`/`grep` text-scanning to a real JSON parse/merge (`python -c "import json; ..."`, since Python is already a hard dependency). Re-running the installer now detects and upgrades an old broken bare `"audacity-mcp"` entry left over from a previous install to the resolved absolute path, while leaving every other already-configured MCP server completely untouched — previously, re-running only ever skipped silently if an `"audacity"` key already existed, broken or not.
+
+## [0.1.17] - 2026-08-01
+
+### PyPI Package Renamed to `audacity-mcp-server`
+
+Setting up the new tokenless PyPI publish workflow (see 0.1.16 below) surfaced that the `audacity-mcp` project on PyPI belongs to a different PyPI account than the one publishing this repo going forward, so Trusted Publishing couldn't be linked to it. Rather than depend on access to that other account, the package is published under a new name this account owns outright.
+
+- PyPI package renamed: `audacity-mcp` → **`audacity-mcp-server`** (`pip install audacity-mcp-server`).
+- The installed CLI command is unaffected — it's still `audacity-mcp` (and `audacity-mcp-setup-gpu`), since `[project.scripts]` in `pyproject.toml` is independent of the package's PyPI name. **No existing Claude Desktop config needs to change.**
+- Updated `README.md` and `docs/INSTALLATION.md` pip-install references accordingly.
+- The old `audacity-mcp` PyPI project is not affiliated with this repo and will not receive further updates from here.
+
+## [0.1.16] - 2026-08-01
+
+### install.bat/install.sh: Claude Desktop Never Getting Configured on Windows, and a Redundant Reinstall
+
+A user reported the installer didn't seem to actually connect AudacityMCP to Claude Desktop.
+
+- **Root cause**: the Microsoft Store / MSIX build of Claude Desktop redirects its `%APPDATA%` writes into an isolated per-package folder (`%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\`) instead of the standard `%APPDATA%\Claude\` path. `install.bat` only ever wrote to the standard path, which that build never reads — so the config step silently did nothing useful for anyone on the Store build.
+- **Fix**: config writing is now a shared subroutine, called once for the standard path and once for every `Claude_*` folder found under `%LOCALAPPDATA%\Packages\`, so both install types get configured.
+
+**The installer was also always re-fetching the package it was sitting right next to.** Both scripts ran `pip install audacity-mcp` unconditionally — fetching fresh from PyPI even when run from inside a just-cloned/downloaded copy of the repo, which is the only way you'd have `install.bat`/`install.sh` in the first place. That's a pointless redundant download, and it also meant the installer could install an older *published* version instead of whatever fixes were sitting in the local copy the user just got.
+
+- Both scripts now always install from the local folder the script itself lives in (`pip install "<script's own folder>"`), never from PyPI or GitHub.
+- If the script is ever separated from the rest of the repo (moved or downloaded standalone, no `pyproject.toml` next to it), it now refuses to run with a clear error instead of silently trying to fetch the code from somewhere else.
+- Fixed a related display bug in `install.bat`'s Python check: `%PYVER%` was expanding at parse-time (before the `for /f` that sets it, inside the same `if (...)` block) so the detected version always printed blank — `Found Python  - already installed`. Switched to delayed expansion (`!PYVER!`).
+
+**Other hardening in this pass, since the whole install flow was under review:**
+
+- Added `--dry-run` (`-n` on macOS/Linux) to both scripts — prints every action (package install, Audacity config edit, Claude Desktop config edit) without changing anything.
+- Both scripts now explain what the Claude Desktop config step does and ask for an explicit y/n confirmation *before* touching that file at all, not just before overwriting it — matching the existing confirmation already in place for Audacity's config.
+- Stripped a handful of non-ASCII characters (`──`, `—`) from `install.bat` that could cause cmd.exe to misparse the file under some codepages; both scripts are now pure ASCII.
+- Restructured (not removed) the Python-missing detection/auto-install flow in both scripts to be more reliable about skipping the winget/brew/apt/dnf/pacman install offer when Python is already present.
+- Updated `README.md` and `docs/INSTALLATION.md` to match: Quick Start / Option A now walks through "download or clone the repo, then run the installer from inside it" instead of a standalone single-file download or `curl | bash` one-liner (which no longer works now that the script requires the repo around it).
+
 ## [0.1.15] - 2026-07-29
 
 ### Transcription: Wrong-Language Retries, and Model Re-Downloads
