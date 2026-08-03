@@ -165,7 +165,7 @@ async def remove_label(client, index: int) -> dict:
     Audacity has no scripting command for deleting a single label, so this
     selects the label's own span on its own label track and split-deletes it.
     Audio tracks are never in the selection, so nothing downstream shifts.
-    Shared by label_delete and by label_delete_region's cleanup step.
+    Shared by label_delete and by label_delete_audio_at's cleanup step.
     """
     if index < 0:
         raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "index must be >= 0")
@@ -548,7 +548,7 @@ def register(mcp: FastMCP):
         trimmed to the boundary; check label_list afterwards if labels on that
         track overlap each other.
 
-        To delete a label *and* the audio under it, use label_delete_region.
+        To delete a label *and* the audio under it, use label_delete_audio_at.
 
         Args:
             index: Flat label index from label_list
@@ -556,12 +556,20 @@ def register(mcp: FastMCP):
         return await remove_label(client, index)
 
     @mcp.tool()
-    async def label_delete_region(
+    async def label_delete_audio_at(
         index: int,
         close_gap: bool = True,
         delete_label: bool = True,
     ) -> dict:
-        """Delete the audio under ONE label — label_delete_regions for a single label.
+        """Delete the audio under ONE label, picked by index — not label_delete (marker only) or label_delete_regions (every label in the current selection, no index).
+
+        This is a custom, composite operation built for podcast/transcript-based
+        editing, not a 1:1 wrapper over a single Audacity scripting command —
+        unlike label_cut_regions/label_delete_regions/label_silence_regions/
+        label_split_regions/label_join_regions, which each call exactly one
+        Audacity command. Audacity has no "delete this one labeled take" command,
+        so this orchestrates several: SelAllTracks, then SelectTime, then
+        Delete/SplitDelete, then clears the leftover marker.
 
         By default the gap closes and everything after shifts left, exactly as
         label_delete_regions does. Pass close_gap=False to leave silence of the
@@ -638,6 +646,10 @@ def register(mcp: FastMCP):
         AUDIO TRACKS — select the audio tracks and time range first. Because the
         timeline closes up, the labeled regions collapse rather than surviving
         unchanged — re-read label_list afterwards to see what remains.
+
+        Not yet independently live-tested against a running Audacity, unlike
+        label_delete_regions/label_silence_regions/label_split_regions/
+        label_join_regions.
         """
         return await client.execute_long("CutLabels")
 
@@ -646,7 +658,7 @@ def register(mcp: FastMCP):
         """Delete the audio under every label, closing the gaps.
 
         Label every unwanted stretch — bad takes, dead air, noise bursts — then
-        remove them all in one pass. Use label_delete_region for a single label.
+        remove them all in one pass. Use label_delete_audio_at for a single label.
         Acts on labeled regions within the current selection on the SELECTED
         AUDIO TRACKS — select the audio tracks and time range first. Because the
         timeline closes up, the labeled regions collapse rather than surviving

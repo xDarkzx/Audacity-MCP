@@ -195,7 +195,7 @@ AI:   select region → reverb effect → export to FLAC
 | **Analysis** | 6 | Contrast, clipping detection, spectrum, beat finder, sound labeling |
 | **Generation** | 5 | Tone, noise, chirp, DTMF, rhythm track |
 | **Transcription** (Experimental) | 7 | Full/selection transcribe, to labels, to SRT/VTT/TXT, model preload |
-| **Labels** | 19 | List/find/edit/delete, batch add, cut/delete/silence labeled regions, marker export (simple/cue/Podlove), per-segment audio export, import/export |
+| **Labels** | 19 | List/find/edit/delete, delete one labeled take's audio by index, batch add, cut/delete/silence labeled regions, marker export (simple/cue/Podlove), per-segment audio export, import/export |
 
 ---
 

@@ -316,11 +316,11 @@ class TestLabelRegionTools:
         assert [c.args[0] for c in client.execute_long.call_args_list] == [command]
 
 
-class TestLabelDeleteRegion:
+class TestLabelDeleteAudioAt:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_closes_the_gap_by_default(self):
         client = _mock_client(TWO_LABELS)
-        result = await _register(client)["label_delete_region"].fn(index=1, delete_label=False)
+        result = await _register(client)["label_delete_audio_at"].fn(index=1, delete_label=False)
 
         # All tracks first so label tracks ripple with the audio, then the
         # label's own span, then a gap-closing Delete.
@@ -335,7 +335,7 @@ class TestLabelDeleteRegion:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_close_gap_false_uses_split_delete(self):
         client = _mock_client(TWO_LABELS)
-        result = await _register(client)["label_delete_region"].fn(
+        result = await _register(client)["label_delete_audio_at"].fn(
             index=0, close_gap=False, delete_label=False)
         assert [c.args[0] for c in client.execute_long.call_args_list] == ["SplitDelete"]
         assert result["closed_gap"] is False
@@ -370,7 +370,7 @@ class TestLabelDeleteRegion:
         client.execute = AsyncMock(side_effect=_execute)
         client.execute_long = AsyncMock(side_effect=_execute)
 
-        result = await _register(client)["label_delete_region"].fn(index=1)
+        result = await _register(client)["label_delete_audio_at"].fn(index=1)
 
         assert result["label_removed"] is True
         assert result["count_after"] == 1
@@ -383,7 +383,7 @@ class TestLabelDeleteRegion:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_delete_label_false_keeps_the_marker(self):
         client = _mock_client(TWO_LABELS)
-        result = await _register(client)["label_delete_region"].fn(index=1, delete_label=False)
+        result = await _register(client)["label_delete_audio_at"].fn(index=1, delete_label=False)
         assert result["label_removed"] is False
         assert _calls_for(client, "SelectTracks") == []
 
@@ -417,7 +417,7 @@ class TestLabelDeleteRegion:
         client.execute_long = AsyncMock(side_effect=_execute)
 
         from audacity_mcp.tools.label_tools import POINT_LABEL_WIDTH
-        result = await _register(client)["label_delete_region"].fn(index=1)
+        result = await _register(client)["label_delete_audio_at"].fn(index=1)
 
         assert result["label_removed"] is True
         # The leftover moved from index 1 to index 0, and that's what got
@@ -447,7 +447,7 @@ class TestLabelDeleteRegion:
         client.execute = AsyncMock(side_effect=_execute)
         client.execute_long = AsyncMock(side_effect=_execute)
 
-        result = await _register(client)["label_delete_region"].fn(index=1)
+        result = await _register(client)["label_delete_audio_at"].fn(index=1)
 
         assert result["label_removed"] is True
         assert "label_note" not in result
@@ -459,7 +459,7 @@ class TestLabelDeleteRegion:
         labels = '[["Label Track", [[5.0, 5.0, "marker"]]]]'
         client = _mock_client(labels)
         with pytest.raises(AudacityMCPError) as exc:
-            await _register(client)["label_delete_region"].fn(index=0)
+            await _register(client)["label_delete_audio_at"].fn(index=0)
         assert exc.value.code == ErrorCode.VALIDATION_FAILED
         assert client.execute_long.call_count == 0
 
@@ -467,7 +467,7 @@ class TestLabelDeleteRegion:
     async def test_index_past_end_rejected(self):
         client = _mock_client(TWO_LABELS)
         with pytest.raises(AudacityMCPError) as exc:
-            await _register(client)["label_delete_region"].fn(index=7)
+            await _register(client)["label_delete_audio_at"].fn(index=7)
         assert exc.value.code == ErrorCode.VALUE_OUT_OF_RANGE
         assert client.execute_long.call_count == 0
 

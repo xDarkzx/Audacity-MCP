@@ -973,9 +973,11 @@ Deletes one label without touching the audio. Audacity has no scripting command 
 
 Adds a whole marker list in one call. `end` defaults to `start` (point label), `text` defaults to empty. Every item is validated before anything is sent, so a bad item fails the whole call instead of leaving a half-written list behind.
 
-### `label_delete_region`
+### `label_delete_audio_at`
 
-Deletes the audio under **one** label — `label_delete_regions` scoped to a single label.
+Deletes the audio under **one** label, picked **by index** from `label_list` — not `label_delete` (marker only, no audio) and not `label_delete_regions` (every label caught in the current selection, no index).
+
+This is a custom, composite operation built for podcast/transcript-based editing, not a 1:1 wrapper over a single Audacity scripting command. Unlike `label_cut_regions`/`label_delete_regions`/`label_silence_regions`/`label_split_regions`/`label_join_regions` — each of which calls exactly one Audacity command — Audacity has no "delete this one labeled take" command, so this orchestrates several: `SelAllTracks`, then `SelectTime`, then `Delete`/`SplitDelete`, then a cleanup pass that clears the leftover marker.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -1004,6 +1006,8 @@ Point labels have no audio underneath and are rejected. Use `label_delete` to re
 **All five act on labeled regions within the current selection on the SELECTED AUDIO TRACKS** — select the audio tracks and time range first (`select_all` for the whole project).
 
 For `label_silence_regions`, `label_split_regions` and `label_join_regions` the timeline length is unchanged and the labels stay where they are. For `label_cut_regions` and `label_delete_regions` the timeline closes up, so the labeled regions collapse rather than surviving unchanged — re-read `label_list` afterwards to see what remains.
+
+`label_delete_regions`, `label_silence_regions`, `label_split_regions` and `label_join_regions` are confirmed against a running Audacity. `label_cut_regions` is not yet independently live-tested.
 
 Typical cleanup: label every bad take or dead-air stretch, then `label_delete_regions` to remove them in one pass. Typical redaction: label the section, then `label_silence_regions` so the material does not get shorter and stays in sync.
 
