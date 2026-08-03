@@ -141,7 +141,6 @@ class TestAnalyzeLabelSounds:
 class TestEffectValidation:
     def test_amplify_rejects_zero(self):
         """ratio=0 would silence audio — should be rejected."""
-        from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
         # We can't call the async tool directly, but we can verify the validation logic
         assert True  # Covered by the ratio <= 0 check in effects_tools.py
 

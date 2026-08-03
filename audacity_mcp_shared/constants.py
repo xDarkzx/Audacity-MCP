@@ -1,7 +1,6 @@
 import os
 import stat
 import sys
-from pathlib import Path
 
 
 def _is_fifo(path: str) -> bool:
@@ -66,8 +65,11 @@ class PipePaths:
                     f"{override}/audacity_script_pipe.from.{uid}",
                 )
 
-            default_to = f"/tmp/audacity_script_pipe.to.{uid}"
-            default_from = f"/tmp/audacity_script_pipe.from.{uid}"
+            # Audacity's own mod-script-pipe convention, not a path this
+            # project chooses - it only ever connects to a pipe Audacity
+            # already created here, never creates one itself.
+            default_to = f"/tmp/audacity_script_pipe.to.{uid}"  # noqa: S108
+            default_from = f"/tmp/audacity_script_pipe.from.{uid}"  # noqa: S108
             if _is_fifo(default_to) and _is_fifo(default_from):
                 return default_to, default_from
 

@@ -138,8 +138,8 @@ def register(mcp: FastMCP):
         if os.path.realpath(parent) == home:
             raise AudacityMCPError(
                 ErrorCode.INVALID_PATH,
-                f"Do not save directly to the home folder. Use a subfolder like Music or Documents. "
-                f"Call get_default_export_folder to get the correct path."
+                "Do not save directly to the home folder. Use a subfolder like Music or Documents. "
+                "Call get_default_export_folder to get the correct path."
             )
         ext = os.path.splitext(path)[1].lstrip(".").lower()
         if ext not in ALLOWED_EXPORT_FORMATS:

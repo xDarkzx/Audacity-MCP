@@ -483,6 +483,9 @@ pip install -e ".[dev]"
 
 # Run tests
 pytest tests/ -x -q
+
+# Run lint (real bugs + security patterns, not style/formatting)
+ruff check .
 ```
 
 ### Adding New Tools

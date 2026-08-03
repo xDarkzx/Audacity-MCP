@@ -18,6 +18,16 @@ pytest tests/ -x -q
 
 All tests must pass before submitting a PR.
 
+## Running Lint
+
+```bash
+ruff check .
+```
+
+CI runs this too — it only checks for real bugs (unused/undefined names, etc.) and
+security-relevant patterns, not style or formatting, so it isn't fussy about how you
+write code. Must pass clean before submitting a PR.
+
 ## Adding a New Tool
 
 1. Choose the appropriate module in `audacity_mcp/tools/` (or create a new one)
@@ -60,7 +70,7 @@ async def my_tool(param: float = 1.0) -> dict:
 
 - Keep PRs focused on a single change
 - Include tests for new tools
-- Make sure all existing tests still pass
+- Make sure all existing tests still pass, and `ruff check .` is clean
 - Describe what your change does and why
 
 ## Reporting Issues

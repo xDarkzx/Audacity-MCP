@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from pathlib import Path
 
 from audacity_mcp_shared.constants import PipePaths, Timeouts
 from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode

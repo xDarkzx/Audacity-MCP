@@ -2,7 +2,7 @@ import os
 import tempfile
 
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock, PropertyMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from audacity_mcp_shared.error_codes import AudacityMCPError, ErrorCode
 
 

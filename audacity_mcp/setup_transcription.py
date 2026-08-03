@@ -20,8 +20,13 @@ def _detect_nvidia_gpu() -> str | None:
     which this treats the same as "no GPU": CPU transcription, no error.
     """
     try:
+        # Read-only diagnostic query the user runs themselves, not something
+        # invoked automatically with elevated trust - PATH resolution here
+        # is an acceptable low-severity tradeoff, not worth resolving to an
+        # absolute path since nvidia-smi's install location varies by driver
+        # version and OS.
         result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],  # noqa: S607
             capture_output=True, text=True, timeout=10,
         )
     except Exception:
