@@ -1,3 +1,5 @@
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2FxDarkzx%2FAudacity-MCP.svg)](https://mcptoplist.com/server/glama%2FxDarkzx%2FAudacity-MCP)
+
 <!-- mcp-name: io.github.xDarkzx/audacity-mcp -->
 <h1 align="center">AudacityMCP</h1>
 
