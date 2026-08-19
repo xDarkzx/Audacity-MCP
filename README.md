@@ -551,6 +551,12 @@ Your support helps keep this project maintained and free for everyone.
 - **[Contributing](CONTRIBUTING.md)** — How to add tools and contribute
 - **[Changelog](CHANGELOG.md)** — Version history and release notes
 
+## Acknowledgments
+
+Thanks to the following for reported bugs, ideas, and feedback that improved this project:
+
+- [@Harsha-Jay-S](https://github.com/Harsha-Jay-S) — diagnosed the `effect_change_pitch`/`effect_change_speed` bug ([#15](https://github.com/xDarkzx/Audacity-MCP/issues/15)) with measured proof against real Audacity, pinpointing the exact root cause.
+
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE) for details.
