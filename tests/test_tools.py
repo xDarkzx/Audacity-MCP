@@ -152,3 +152,45 @@ class TestEffectValidation:
     def test_equalization_rejects_even_length(self):
         """EQ filter length must be odd."""
         assert 4000 % 2 == 0  # even number rejected
+
+
+class TestChangePitchAndSpeed:
+    # Regression for the bug reported in GitHub issue #15: ChangePitch's
+    # real Audacity automation param is Percentage, not Semitones (an
+    # unrecognized param is silently ignored - the tool reported OK while
+    # doing nothing), and "ChangeSpeed" isn't a valid command ID at all
+    # (the real one is "ChangeSpeedAndPitch").
+    @pytest.fixture
+    def tools(self):
+        mcp = FastMCP("TestEffects")
+        self.client = MagicMock()
+        self.client.execute = AsyncMock(return_value={"success": True, "raw": "", "message": "", "data": {}})
+        self.client.execute_long = AsyncMock(return_value={"success": True, "raw": "", "message": "", "data": {}})
+        with patch("audacity_mcp.main.client", self.client):
+            from audacity_mcp.tools.effects_tools import register
+            register(mcp)
+        return mcp._tool_manager._tools
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_change_pitch_sends_percentage_not_semitones(self, tools):
+        # Value and expected result straight from the issue's own measured
+        # proof: ChangePitch: Percentage=-0.713693 shifted 440 Hz to
+        # 436.86 Hz "exact to 6 digits" for a -0.124 semitone request.
+        await tools["effect_change_pitch"].fn(semitones=-0.124)
+        call = self.client.execute_long.call_args
+        assert call.args[0] == "ChangePitch"
+        assert "Semitones" not in call.kwargs
+        assert call.kwargs["Percentage"] == pytest.approx(-0.713693, abs=1e-6)
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_change_pitch_zero_semitones_is_zero_percent(self, tools):
+        await tools["effect_change_pitch"].fn(semitones=0.0)
+        call = self.client.execute_long.call_args
+        assert call.kwargs["Percentage"] == 0.0
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_change_speed_uses_real_command_id(self, tools):
+        await tools["effect_change_speed"].fn(percent=100.0)
+        call = self.client.execute_long.call_args
+        assert call.args[0] == "ChangeSpeedAndPitch"
+        assert call.kwargs["Percentage"] == 100.0

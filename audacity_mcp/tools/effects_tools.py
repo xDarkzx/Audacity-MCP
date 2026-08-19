@@ -96,7 +96,14 @@ def register(mcp: FastMCP):
         Args:
             semitones: Number of semitones to shift (negative = lower, positive = higher)
         """
-        return await client.execute_long("ChangePitch", Semitones=semitones)
+        # Audacity's ChangePitch automation param is Percentage (percent
+        # change of frequency), not Semitones - an unrecognized param name
+        # is silently ignored by Audacity (still replies OK), so this was a
+        # silent no-op rather than an error. Convert: a semitone shift
+        # multiplies frequency by 2^(semitones/12); percent change is that
+        # multiplier expressed as (multiplier - 1) * 100.
+        percentage = 100.0 * (2.0 ** (semitones / 12.0) - 1.0)
+        return await client.execute_long("ChangePitch", Percentage=round(percentage, 6))
 
     @mcp.tool()
     async def effect_change_tempo(percent: float = 0.0) -> dict:
@@ -118,7 +125,11 @@ def register(mcp: FastMCP):
         """
         if not -99 <= percent <= 4900:
             raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "percent must be -99 to 4900")
-        return await client.execute_long("ChangeSpeed", Percentage=percent)
+        # "ChangeSpeed" is not a valid Audacity command ID - the scripting
+        # registry lists it as "ChangeSpeedAndPitch" (confirmed via
+        # GetInfo: Type=Commands). The old ID failed outright rather than
+        # silently no-op'ing, since Audacity rejects unrecognized commands.
+        return await client.execute_long("ChangeSpeedAndPitch", Percentage=percent)
 
     @mcp.tool()
     async def effect_equalization(curve_name: str = "Default", length: int = 4001) -> dict:

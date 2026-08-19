@@ -2,6 +2,17 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [0.1.21] - 2026-08-18
+
+### `effect_change_pitch`/`effect_change_speed`: Silent No-Op and Outright Failure Against Real Audacity
+
+Reported by [@Harsha-Jay-S](https://github.com/Harsha-Jay-S) in [#15](https://github.com/xDarkzx/Audacity-MCP/issues/15), with measured proof against Audacity 3.7.8 pinpointing the exact root cause — an exceptionally clear report.
+
+- **`effect_change_pitch`** sent `ChangePitch: Semitones=...`, but Audacity's actual automation param for that command is `Percentage` (percent change in frequency) — there is no `Semitones` param. Audacity silently ignores unrecognized params and still replies `OK`, so the tool reported success while changing nothing. Measured: `Semitones=-0.124` left a 394.81 Hz tone completely unchanged; `Percentage=-0.713693` (the correct conversion) shifted 440 Hz to 436.86 Hz exactly.
+- **`effect_change_speed`** sent the command ID `ChangeSpeed`, which doesn't exist in Audacity's scripting registry at all — the real ID is `ChangeSpeedAndPitch`. Unlike the pitch bug, this failed outright (`not recognized`) rather than silently no-op'ing.
+- **Fix**: `effect_change_pitch` now converts semitones to the percentage Audacity actually expects (`100 * (2^(semitones/12) - 1)`, the standard equal-temperament conversion) and sends `Percentage`. `effect_change_speed` now sends `ChangeSpeedAndPitch`.
+- Added `tests/test_tools.py::TestChangePitchAndSpeed`, verifying the exact wire parameters against the issue's own measured values.
+
 ## [0.1.20] - 2026-08-04
 
 ### Label Tools: From "Create Only" to a Full Editing Workflow
