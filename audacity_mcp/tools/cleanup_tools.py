@@ -190,6 +190,29 @@ def register(mcp: FastMCP):
             except OSError:
                 pass
 
+    async def _measure_audio_full() -> dict | None:
+        """Export the current selection to a temp WAV and return the full _measure_wav()
+        dict (peak_db, overall_rms_db, clipped_samples, etc.), or None on failure.
+        Non-destructive — only reads back what's already in the project.
+
+        Deliberately does NOT force-select anything first: it measures whatever the
+        caller already has selected, since forcing select-all here would silently
+        widen the scope of both this measurement and the gain the caller is about to
+        apply based on it (the exact selection-scope bug this was meant to avoid)."""
+        tmp_wav = _temp_wav_path()
+        try:
+            await client.execute_long("Export2", Filename=tmp_wav, NumChannels=1)
+            if not os.path.exists(tmp_wav) or os.path.getsize(tmp_wav) < 100:
+                return None
+            return _measure_wav(tmp_wav)
+        except Exception:
+            return None
+        finally:
+            try:
+                os.remove(tmp_wav)
+            except OSError:
+                pass
+
     async def _loudness_step(job: dict, peak_target: float = -3.0):
         """Safe final loudness step — peak normalize only, NO LUFS.
 
@@ -484,6 +507,12 @@ def register(mcp: FastMCP):
         - -14 LUFS: Spotify, YouTube, most streaming
         - -11 LUFS: Loud masters (hip-hop/EDM)
 
+        SAFETY: this tool measures peak/RMS before and after applying gain and will refuse
+        to run (or report success: false) rather than silently ship a clipped result. If it
+        refuses, DO NOT retry with a workaround — fix the input levels first (normalize() or
+        a lower lufs_level). If it reports clipping after the fact, a single Ctrl+Z in
+        Audacity may not fully revert the change — check Edit > Undo History.
+
         Args:
             lufs_level: Target loudness in LUFS (-50 to -5). Default: -16.0
             stereo_independent: Normalize L/R channels independently. Default: False
@@ -491,13 +520,61 @@ def register(mcp: FastMCP):
         """
         if not -50 <= lufs_level <= -5:
             raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, "lufs_level must be -50 to -5")
-        return await client.execute_long(
+
+        before = await _measure_audio_full()
+        if before is None or before.get("peak_db") is None:
+            raise AudacityMCPError(
+                ErrorCode.COMMAND_FAILED,
+                "Could not measure current audio levels — refusing to apply LUFS gain blind. "
+                "Make sure audio is loaded and try auto_analyze_audio to diagnose.",
+            )
+
+        peak_before = before["peak_db"]
+        rms_before = before.get("overall_rms_db")
+
+        if rms_before is not None:
+            # No true BS.1770 LUFS meter is available here, so unweighted RMS is used as a
+            # conservative proxy for current loudness. A single broadband gain is applied to
+            # the whole clip, so whatever dB shift moves current RMS to the target moves the
+            # peak by the same amount — that's exact, only the RMS-as-LUFS estimate is not.
+            estimated_gain_db = lufs_level - rms_before
+            projected_peak_db = peak_before + estimated_gain_db
+            if projected_peak_db > -1.0:
+                raise AudacityMCPError(
+                    ErrorCode.COMMAND_REJECTED,
+                    f"Refusing to apply loudness_normalize(lufs_level={lufs_level}): current "
+                    f"peak is {peak_before} dB and RMS is {rms_before} dB, so reaching "
+                    f"{lufs_level} LUFS would project a peak of ~{round(projected_peak_db, 1)} "
+                    "dB, which would clip. Run normalize() first to raise levels gently, or "
+                    "pick a lower lufs_level, then re-check with auto_analyze_audio.",
+                )
+
+        result = await client.execute_long(
             "LoudnessNormalization",
             NormalizeTo=0,  # 0 = LUFS (perceived loudness), 1 = RMS
             StereoIndependent=stereo_independent,
             LUFSLevel=lufs_level,
             DualMono=dual_mono,
         )
+
+        after = await _measure_audio_full()
+        if after is not None and after.get("peak_db") is not None:
+            if after["clipped_samples"] > 0 or after["peak_db"] >= -0.1:
+                return {
+                    "success": False,
+                    "error": (
+                        f"loudness_normalize was applied but the result is clipping: peak "
+                        f"went from {peak_before} dB to {after['peak_db']} dB with "
+                        f"{after['clipped_samples']} clipped samples. A single Ctrl+Z may not "
+                        "fully revert this — check Edit > Undo History in Audacity — then "
+                        "retry with a lower lufs_level."
+                    ),
+                    "peak_before_db": peak_before,
+                    "peak_after_db": after["peak_db"],
+                    "clipped_samples": after["clipped_samples"],
+                }
+
+        return result
 
     # ── Pipeline status polling ───────────────────────────────────────
 
@@ -695,11 +772,15 @@ def register(mcp: FastMCP):
 
     @mcp.tool()
     async def auto_analyze_audio() -> dict:
-        """Analyze the current audio track and recommend the best pipeline to use.
+        """Analyze whatever is currently selected and recommend the best pipeline to use.
         This is SYNCHRONOUS — it returns the analysis directly, no job_id needed.
 
         Returns peak level, estimated noise floor, duration, clipping status,
         and a recommendation for which auto_ pipeline to use next.
+
+        SCOPE: this measures the current selection, not the whole project. Call select_all()
+        first to analyze everything, or track_select()/select_region() first to scope the
+        analysis to one track or region.
 
         IMPORTANT: Load your audio into Audacity before calling this.
         """
@@ -739,7 +820,6 @@ def register(mcp: FastMCP):
         measurement_error = None
 
         try:
-            await _select_all()
             export_result = await client.execute_long("Export2", Filename=tmp_wav, NumChannels=1)
 
             if not os.path.exists(tmp_wav):

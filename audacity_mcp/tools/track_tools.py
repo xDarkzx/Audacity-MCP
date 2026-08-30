@@ -83,14 +83,19 @@ def register(mcp: FastMCP):
 
     @mcp.tool()
     async def track_select(track: int) -> dict:
-        """Select a track by index. Many operations require selecting a track first.
+        """Select a track by index, including its full time range, so it's immediately
+        ready for effects (e.g. compressor, normalize). To work on a sub-region instead,
+        call select_region() afterward to narrow the time range.
 
         Args:
             track: Track index (0-based)
         """
         if track < 0 or track >= MAX_TRACKS:
             raise AudacityMCPError(ErrorCode.VALUE_OUT_OF_RANGE, f"Track index must be 0-{MAX_TRACKS - 1}")
-        return await client.execute("SelectTracks", Track=track, TrackCount=1)
+        result = await client.execute("SelectTracks", Track=track, TrackCount=1)
+        await client.execute("CursTrackStart")
+        await client.execute("SelCursorToTrackEnd")
+        return result
 
     @mcp.tool()
     async def track_add_label() -> dict:

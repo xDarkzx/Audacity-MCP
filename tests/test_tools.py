@@ -194,3 +194,154 @@ class TestChangePitchAndSpeed:
         call = self.client.execute_long.call_args
         assert call.args[0] == "ChangeSpeedAndPitch"
         assert call.kwargs["Percentage"] == 100.0
+
+
+class TestLoudnessNormalizeSafety:
+    # Regression: loudness_normalize reported success while boosting audio into
+    # clipping (162,281 clipped samples, peak pinned at 0.0 dB) because it never
+    # measured levels before applying gain. It now measures peak/RMS before
+    # applying gain and refuses if the projected peak would clip, and re-measures
+    # afterward to catch anything the estimate missed.
+    @pytest.fixture
+    def tools(self):
+        mcp = FastMCP("TestLoudness")
+        self.client = MagicMock()
+        self.client.execute = AsyncMock(return_value={"success": True, "raw": "", "message": "", "data": {}})
+        with patch("audacity_mcp.main.client", self.client):
+            from audacity_mcp.tools.cleanup_tools import register
+            register(mcp)
+        return mcp._tool_manager._tools
+
+    @staticmethod
+    def _write_wav(path, values, rate=100):
+        import wave
+        import struct
+        with wave.open(path, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(rate)
+            wf.writeframes(struct.pack(f"<{len(values)}h", *values))
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_refuses_when_projected_peak_would_clip(self, tools):
+        # Quiet overall RMS (~-22dB) with a hot peak (~-6dB) - boosting to hit
+        # -14 LUFS off the RMS estimate would push the projected peak past 0dB.
+        values = [16000] * 5 + [50] * 195
+
+        async def fake_execute_long(command, *args, **kwargs):
+            if command == "Export2":
+                self._write_wav(kwargs["Filename"], values)
+            return {"success": True, "raw": "", "message": "", "data": {}}
+
+        self.client.execute_long = AsyncMock(side_effect=fake_execute_long)
+
+        with pytest.raises(AudacityMCPError) as exc:
+            await tools["loudness_normalize"].fn(lufs_level=-14.0)
+        assert exc.value.code == ErrorCode.COMMAND_REJECTED
+        calls = [c.args[0] for c in self.client.execute_long.call_args_list]
+        assert "LoudnessNormalization" not in calls
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_proceeds_when_projected_peak_is_safe(self, tools):
+        # Flat, uniform-amplitude signal (~-10dB peak and RMS) - reaching -16
+        # LUFS reduces gain rather than boosting, so it's always safe.
+        values = [10000] * 200
+
+        async def fake_execute_long(command, *args, **kwargs):
+            if command == "Export2":
+                self._write_wav(kwargs["Filename"], values)
+                return {"success": True, "raw": "", "message": "", "data": {}}
+            if command == "LoudnessNormalization":
+                return {"success": True, "raw": "", "message": "applied", "data": {}}
+            return {"success": True, "raw": "", "message": "", "data": {}}
+
+        self.client.execute_long = AsyncMock(side_effect=fake_execute_long)
+
+        result = await tools["loudness_normalize"].fn(lufs_level=-16.0)
+        assert result.get("success", True) is True
+        calls = [c for c in self.client.execute_long.call_args_list if c.args[0] == "LoudnessNormalization"]
+        assert len(calls) == 1
+        assert calls[0].kwargs["LUFSLevel"] == -16.0
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_detects_clipping_applied_after_the_fact(self, tools):
+        # Pre-flight estimate looks safe, but the actual result clips (e.g. the
+        # RMS-based estimate undershoots real LUFS gain) - must be caught, not
+        # silently reported as success.
+        safe_values = [10000] * 200
+        clipped_values = [32767] * 200
+        call_count = {"export2": 0}
+
+        async def fake_execute_long(command, *args, **kwargs):
+            if command == "Export2":
+                call_count["export2"] += 1
+                values = safe_values if call_count["export2"] == 1 else clipped_values
+                self._write_wav(kwargs["Filename"], values)
+                return {"success": True, "raw": "", "message": "", "data": {}}
+            if command == "LoudnessNormalization":
+                return {"success": True, "raw": "", "message": "applied", "data": {}}
+            return {"success": True, "raw": "", "message": "", "data": {}}
+
+        self.client.execute_long = AsyncMock(side_effect=fake_execute_long)
+
+        result = await tools["loudness_normalize"].fn(lufs_level=-16.0)
+        assert result["success"] is False
+        assert result["clipped_samples"] > 0
+        calls = [c for c in self.client.execute_long.call_args_list if c.args[0] == "LoudnessNormalization"]
+        assert len(calls) == 1  # it did actually apply the effect before catching the bad result
+
+
+class TestAutoAnalyzeAudioScope:
+    # Regression: auto_analyze_audio forced SelAllTracks+SelectAll before
+    # exporting, silently overriding whatever the caller had already selected
+    # (e.g. a single track) and always measuring the whole project instead.
+    @pytest.fixture
+    def tools(self):
+        mcp = FastMCP("TestAutoAnalyze")
+        self.client = MagicMock()
+        self.client.execute = AsyncMock(return_value={"success": True, "raw": "", "message": "", "data": {}})
+        with patch("audacity_mcp.main.client", self.client):
+            from audacity_mcp.tools.cleanup_tools import register
+            register(mcp)
+        return mcp._tool_manager._tools
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_does_not_force_select_all_before_measuring(self, tools):
+        values = [10000] * 200
+
+        async def fake_execute_long(command, *args, **kwargs):
+            if command == "Export2":
+                TestLoudnessNormalizeSafety._write_wav(kwargs["Filename"], values)
+            return {"success": True, "raw": "", "message": "", "data": {}}
+
+        self.client.execute_long = AsyncMock(side_effect=fake_execute_long)
+
+        await tools["auto_analyze_audio"].fn()
+        commands = [c.args[0] for c in self.client.execute.call_args_list]
+        assert "SelAllTracks" not in commands
+        assert "SelectAll" not in commands
+
+
+class TestTrackSelectFullRange:
+    # Regression: track_select only selected the track object (SelectTracks),
+    # not a time range, so an effect called right after it silently no-op'd -
+    # you had to know to also call select_region(). Now it selects the track's
+    # full time range too, so it's immediately usable.
+    @pytest.fixture
+    def tools(self):
+        mcp = FastMCP("TestTrackSelect")
+        self.client = MagicMock()
+        self.client.execute = AsyncMock(return_value={"success": True, "raw": "", "message": "", "data": {}})
+        self.client.execute_long = AsyncMock(return_value={"success": True, "raw": "", "message": "", "data": {}})
+        with patch("audacity_mcp.main.client", self.client):
+            from audacity_mcp.tools.track_tools import register
+            register(mcp)
+        return mcp._tool_manager._tools
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_selects_track_then_full_time_range(self, tools):
+        await tools["track_select"].fn(track=2)
+        commands = [c.args[0] for c in self.client.execute.call_args_list]
+        assert commands == ["SelectTracks", "CursTrackStart", "SelCursorToTrackEnd"]
+        select_call = self.client.execute.call_args_list[0]
+        assert select_call.kwargs == {"Track": 2, "TrackCount": 1}

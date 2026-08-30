@@ -2,6 +2,19 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [0.1.22] - 2026-08-30
+
+### `loudness_normalize`: Silent Clipping on Boost, Plus Two Related Selection-Scope Bugs
+
+- **`loudness_normalize`** applied gain with no check against the audio's actual headroom — on real audio this boosted a track into clipping (162,281 clipped samples, peak pinned at 0.0 dB) while still reporting `success: true`. It now measures peak and RMS before applying gain and refuses (without touching the audio) if the projected peak — RMS used as a conservative proxy for LUFS, since there's no true BS.1770 meter in this codebase — would clip. It also re-measures afterward and returns `success: false` with the real numbers if clipping happened despite the estimate.
+- **`auto_analyze_audio`** forced `SelAllTracks`+`SelectAll` before exporting for measurement, silently overriding whatever the caller had already selected — analyzing a single track always returned whole-project stats instead. It now measures whatever is currently selected. Verified live with two tracks at very different levels: selecting each individually now returns correctly isolated stats instead of always the mixed-project figure.
+- **`track_select`** only selected the track object (`SelectTracks`), not a time range, so an effect called immediately after it would silently do nothing — a separate `select_region()` call was needed but nothing said so. It now also selects the track's full time range, so it's usable immediately. Verified live: `track_select` followed directly by `normalize`, with no `select_region` in between, now actually changes the audio.
+- Caught during live verification: the first version of the `loudness_normalize` fix reused a `_select_all()` call inside its new measurement helper, which would have silently widened the tool's own scope to the whole project instead of the caller's selection — the same class of bug as the `auto_analyze_audio` one above, reintroduced in new code. Fixed before release; the measurement helper now respects whatever is currently selected.
+- Known limitation, not fixed here: a single Ctrl+Z in Audacity does not cleanly undo one `loudness_normalize` call — clipping only partially clears and a stray empty track can appear. This is Audacity's own undo-history behavior for that effect (the tool itself only ever sends one command), not something fixable from this side. The docstring now says to check Edit > Undo History rather than trust a single undo.
+- Added `tests/test_tools.py::TestLoudnessNormalizeSafety`, `TestAutoAnalyzeAudioScope`, `TestTrackSelectFullRange`.
+
+**Testing:** confirmed live against a running Audacity 3.7.8 instance via the real MCP protocol (not mocks) — pre-flight refusal, safe-path application, per-track `auto_analyze_audio` isolation across two tracks, and `track_select` immediately usable for an effect.
+
 ## [0.1.21] - 2026-08-18
 
 ### `effect_change_pitch`/`effect_change_speed`: Silent No-Op and Outright Failure Against Real Audacity
