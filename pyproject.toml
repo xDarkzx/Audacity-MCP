@@ -34,7 +34,7 @@ dependencies = [
     # Bump the ceiling only after actually testing against a real 2.x
     # release. (Same issue hit and fixed the same way across this user's
     # other MCP-server repos: SongForge-MCP, Reaper-MCP.)
-    "mcp[cli]>=1.0.0,<2.0.0",
+    "mcp[cli]>=1.0.0,<3.0.0",
     "faster-whisper>=1.0.0",
 ]
 
