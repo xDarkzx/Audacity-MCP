@@ -1,3 +1,4 @@
+import asyncio
 import sys
 import pytest
 from unittest.mock import patch, MagicMock
@@ -78,3 +79,26 @@ class TestClientExecute:
                 client._from_pipe = MagicMock()
                 result = await client.execute("Play")
                 assert result["success"] is True
+
+    async def test_execute_timeout_is_pipe_timeout_not_command_failed(self, client):
+        # Regression (issue #17): asyncio.TimeoutError is a distinct class from
+        # the builtin TimeoutError on Python 3.10 - catching only the builtin
+        # let every asyncio.wait_for timeout fall through to the generic
+        # COMMAND_FAILED handler on that version. Raising asyncio.TimeoutError
+        # explicitly (not the builtin) targets exactly the path that broke.
+        # _send_raw is mocked so the real Win32/posix pipe code never runs -
+        # only the wait_for/exception-handling path is under test here.
+        with patch.object(client, "_send_raw", return_value="BatchCommand finished: OK\n"):
+            with patch("audacity_mcp.audacity_client.asyncio.wait_for", side_effect=asyncio.TimeoutError()):
+                with patch.object(client, "_open_pipes"):
+                    with pytest.raises(AudacityMCPError) as exc_info:
+                        await client.execute("Play")
+                    assert exc_info.value.code == ErrorCode.PIPE_TIMEOUT
+
+    async def test_execute_long_timeout_is_pipe_timeout_not_command_failed(self, client):
+        with patch.object(client, "_send_raw", return_value="BatchCommand finished: OK\n"):
+            with patch("audacity_mcp.audacity_client.asyncio.wait_for", side_effect=asyncio.TimeoutError()):
+                with patch.object(client, "_open_pipes"):
+                    with pytest.raises(AudacityMCPError) as exc_info:
+                        await client.execute_long("Play")
+                    assert exc_info.value.code == ErrorCode.PIPE_TIMEOUT

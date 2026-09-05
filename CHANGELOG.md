@@ -2,6 +2,16 @@
 
 All notable changes to AudacityMCP will be documented in this file.
 
+## [0.1.23] - 2026-09-04
+
+### Timeout Misclassification on Python 3.10, Plus an Event-Loop-Blocking Measurement Bug Found While Checking For More
+
+Reported by [@vduggan](https://github.com/vduggan) in [#17](https://github.com/xDarkzx/Audacity-MCP/issues/17), with a minimal reproduction pinpointing the exact root cause.
+
+- **`AudacityClient.execute()`/`execute_long()`** caught only the builtin `TimeoutError` around their `asyncio.wait_for` calls. On Python 3.10, `asyncio.TimeoutError` is a distinct class from the builtin (unified only in 3.11) — every real pipe timeout fell through to the generic handler and surfaced as a bare `COMMAND_FAILED (2000)` with no message, instead of `PIPE_TIMEOUT` and its "Audacity may have stopped responding" text. Fixed by catching `(asyncio.TimeoutError, TimeoutError)` at both sites — correct on every supported version, since the two names are the same object from 3.11 onward.
+- **While auditing the rest of the server for related hang/timeout risk**: `_measure_wav()` — the pure-Python per-sample loop used to measure peak/RMS/clipping from an exported WAV — was called directly inside `async def` functions at three call sites (`auto_analyze_audio`, and the two pipeline/`loudness_normalize` measurement helpers), never offloaded to a thread. Benchmarked at ~15 seconds of straight blocking CPU time for just a 30-minute file. Since this runs on the same event loop that services `check_pipeline_status`/`check_transcription_status` polling, a long file (an hour-plus podcast or audiobook — exactly what this project's pipelines target) would freeze those polls for the same duration, defeating the entire background-job/poll pattern this project uses to work around Claude Desktop's 60-second tool-call timeout. Fixed by running `_measure_wav` via `loop.run_in_executor` at all three sites, matching the pattern already used for `faster-whisper` model loading/transcription. Verified with a concurrent 0.2s ticker task alongside a 30-minute-file measurement: the ticker fired on schedule throughout instead of stalling, confirming the loop stays responsive.
+- Added `tests/test_client.py::TestClientExecute::test_execute_timeout_is_pipe_timeout_not_command_failed` and `test_execute_long_timeout_is_pipe_timeout_not_command_failed`, raising `asyncio.TimeoutError` explicitly (not the builtin) to target the exact path that broke on 3.10.
+
 ## [0.1.22] - 2026-08-30
 
 ### `loudness_normalize`: Silent Clipping on Boost, Plus Two Related Selection-Scope Bugs

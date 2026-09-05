@@ -307,7 +307,7 @@ class AudacityClient:
                     loop.run_in_executor(None, self._send_raw, cmd_str),
                     timeout=Timeouts.COMMAND,
                 )
-            except TimeoutError:
+            except (asyncio.TimeoutError, TimeoutError):
                 self._close_pipes()
                 raise AudacityMCPError(
                     ErrorCode.PIPE_TIMEOUT,
@@ -329,7 +329,7 @@ class AudacityClient:
                     loop.run_in_executor(None, self._send_raw, cmd_str),
                     timeout=Timeouts.LONG_COMMAND,
                 )
-            except TimeoutError:
+            except (asyncio.TimeoutError, TimeoutError):
                 self._close_pipes()
                 raise AudacityMCPError(
                     ErrorCode.PIPE_TIMEOUT,

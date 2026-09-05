@@ -176,7 +176,12 @@ def register(mcp: FastMCP):
             if not os.path.exists(tmp_wav) or os.path.getsize(tmp_wav) < 100:
                 job["steps_failed"].append(f"measurement: WAV export failed (file missing or empty at {tmp_wav})")
                 return None, None
-            measurements = _measure_wav(tmp_wav)
+            # _measure_wav is a pure-Python per-sample loop - measured at ~15s of
+            # blocking CPU time for just a 30-minute file. Run it off the event
+            # loop so a long file doesn't freeze concurrent check_pipeline_status
+            # polls (the whole point of the background job/poll pattern).
+            loop = asyncio.get_running_loop()
+            measurements = await loop.run_in_executor(None, _measure_wav, tmp_wav)
             if measurements is None:
                 job["steps_failed"].append("measurement: WAV exists but could not parse audio data")
                 return None, None
@@ -204,7 +209,8 @@ def register(mcp: FastMCP):
             await client.execute_long("Export2", Filename=tmp_wav, NumChannels=1)
             if not os.path.exists(tmp_wav) or os.path.getsize(tmp_wav) < 100:
                 return None
-            return _measure_wav(tmp_wav)
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, _measure_wav, tmp_wav)
         except Exception:
             return None
         finally:
@@ -829,7 +835,11 @@ def register(mcp: FastMCP):
                 if file_size < 100:
                     measurement_error = f"Export2 created a tiny file ({file_size} bytes) — export may have failed"
                 else:
-                    measurements = _measure_wav(tmp_wav)
+                    # Pure-Python per-sample loop - offload so a long file (this is
+                    # called directly, synchronously, no job/poll pattern here)
+                    # doesn't freeze the event loop for other concurrent calls.
+                    loop = asyncio.get_running_loop()
+                    measurements = await loop.run_in_executor(None, _measure_wav, tmp_wav)
                     if measurements is None:
                         measurement_error = f"WAV file exists ({file_size} bytes) but could not parse audio data"
                     elif measurements["duration"] and measurements["duration"] > 0:
