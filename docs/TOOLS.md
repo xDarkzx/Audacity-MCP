@@ -597,13 +597,14 @@ Add a new empty label track.
 Remove selected track(s).
 
 ### `track_set_properties`
+Changes only the given track and leaves the current track selection as it was (Audacity's `SetTrack` acts on the selected tracks, so the tool selects the target for the call and restores the selection afterwards). At least one property is required.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `track` | int | — | Track index |
 | `name` | str | None | Track name |
-| `gain` | float | None | Gain in dB |
-| `pan` | float | None | Pan (-1 to 1) |
+| `gain` | float | None | Gain in dB (-36 to 36; sent as `Volume` for Audacity 3.7+ and `Gain` for older versions) |
+| `pan` | float | None | Pan (-1.0 left to 1.0 right; converted to Audacity's percent scale) |
 | `mute` | bool | None | Mute state |
 | `solo` | bool | None | Solo state |
 
@@ -617,6 +618,7 @@ Mix and render selected tracks into one.
 Mix and render selected tracks into a new track, keeping the originals.
 
 ### `track_mute`
+Mutes or unmutes only the given track; the current track selection is preserved.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|

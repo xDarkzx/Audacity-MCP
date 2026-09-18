@@ -345,3 +345,102 @@ class TestTrackSelectFullRange:
         assert commands == ["SelectTracks", "CursTrackStart", "SelCursorToTrackEnd"]
         select_call = self.client.execute.call_args_list[0]
         assert select_call.kwargs == {"Track": 2, "TrackCount": 1}
+
+
+class TestTrackPropertiesTargetOneTrack:
+    # Regression: SetTrack / SetTrackStatus act on the SELECTED tracks and
+    # ignore Track= (Audacity 3.7.9: renaming "track 1" while tracks 0 and 1
+    # were selected renamed both; with only track 0 selected it renamed track 0).
+    # The tools now select the target alone, apply, and restore the previous
+    # track selection. Also: SetTrackStatus has no Mute/Solo/Gain/Pan, so
+    # track_mute never muted anything and track_set_properties only ever set
+    # the name; both now use SetTrack, with Volume (dB, 3.7+) alongside Gain
+    # (older) and Pan converted to Audacity's percent scale.
+    def _tools(self, selected, count=3):
+        mcp = FastMCP("TestTrackProps")
+        self.client = MagicMock()
+        tracks = [{"name": f"t{i}", "kind": "wave", "selected": 1 if i in selected else 0} for i in range(count)]
+        import json
+
+        async def execute(command, **params):
+            if command == "GetInfo":
+                return {"success": True, "raw": "", "message": json.dumps(tracks), "data": {}}
+            return {"success": True, "raw": "", "message": "", "data": {}}
+
+        self.client.execute = AsyncMock(side_effect=execute)
+        self.client.execute_long = AsyncMock(return_value={"success": True, "raw": "", "message": "", "data": {}})
+        with patch("audacity_mcp.main.client", self.client):
+            from audacity_mcp.tools.track_tools import register
+            register(mcp)
+        return mcp._tool_manager._tools
+
+    def _calls(self):
+        return [(c.args[0], c.kwargs) for c in self.client.execute.call_args_list]
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_rename_selects_target_alone_and_restores_both(self, ):
+        tools = self._tools(selected=[0, 1])
+        await tools["track_set_properties"].fn(track=1, name="dup")
+        assert self._calls() == [
+            ("GetInfo", {"Type": "Tracks"}),
+            ("SelectTracks", {"Track": 1, "TrackCount": 1, "Mode": "Set"}),
+            ("SetTrack", {"Name": "dup"}),
+            ("SelectTracks", {"Track": 0, "TrackCount": 1, "Mode": "Set"}),
+            ("SelectTracks", {"Track": 1, "TrackCount": 1, "Mode": "Add"}),
+        ]
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_mute_uses_settrack_and_clears_selection_when_none_was_selected(self):
+        tools = self._tools(selected=[])
+        await tools["track_mute"].fn(track=0, mute=True)
+        assert self._calls() == [
+            ("GetInfo", {"Type": "Tracks"}),
+            ("SelectTracks", {"Track": 0, "TrackCount": 1, "Mode": "Set"}),
+            ("SetTrack", {"Mute": True}),
+            ("SelectTracks", {"Track": 0, "TrackCount": 3, "Mode": "Remove"}),
+        ]
+        assert not any(name == "SetTrackStatus" for name, _ in self._calls())
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_no_restore_when_target_was_the_only_selected_track(self):
+        tools = self._tools(selected=[2])
+        await tools["track_mute"].fn(track=2, mute=False)
+        assert [name for name, _ in self._calls()] == ["GetInfo", "SelectTracks", "SetTrack"]
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_gain_and_pan_use_audacity_names_and_scales(self):
+        tools = self._tools(selected=[1])
+        await tools["track_set_properties"].fn(track=1, gain=-6, pan=-0.5, solo=True)
+        set_call = [kw for name, kw in self._calls() if name == "SetTrack"][0]
+        assert set_call == {"Volume": -6, "Gain": -6, "Pan": -50.0, "Solo": True}
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_index_beyond_project_is_rejected_before_touching_selection(self):
+        tools = self._tools(selected=[0], count=2)
+        with pytest.raises(AudacityMCPError) as exc_info:
+            await tools["track_mute"].fn(track=5)
+        assert exc_info.value.code == ErrorCode.VALUE_OUT_OF_RANGE
+        assert [name for name, _ in self._calls()] == ["GetInfo"]
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_selection_is_restored_even_if_settrack_fails(self):
+        tools = self._tools(selected=[0])
+        original = self.client.execute.side_effect
+
+        async def execute(command, **params):
+            if command == "SetTrack":
+                raise AudacityMCPError(ErrorCode.COMMAND_FAILED, "boom")
+            return await original(command, **params)
+
+        self.client.execute.side_effect = execute
+        with pytest.raises(AudacityMCPError):
+            await tools["track_set_properties"].fn(track=1, name="x")
+        assert self._calls()[-1] == ("SelectTracks", {"Track": 0, "TrackCount": 1, "Mode": "Set"})
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_nothing_to_set_is_an_error(self):
+        tools = self._tools(selected=[0])
+        with pytest.raises(AudacityMCPError) as exc_info:
+            await tools["track_set_properties"].fn(track=0)
+        assert exc_info.value.code == ErrorCode.MISSING_PARAMETER
+        assert self._calls() == []

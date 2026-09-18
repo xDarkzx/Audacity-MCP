@@ -64,6 +64,9 @@ class AudacityClient:
         self._lock = asyncio.Lock()
         self._to_pipe = None
         self._from_pipe = None
+        # (future, command) of a worker whose caller timed out but which is
+        # still waiting for Audacity's reply; see _run/_await_pending.
+        self._pending = None
 
     def _open_pipes(self):
         try:
@@ -186,6 +189,15 @@ class AudacityClient:
     # bounded retry — closing our ends between attempts so the relay finishes its
     # cycle and we reopen clean — makes it reliable. A bad cycle fails fast
     # (immediate empty read), so the retries are cheap in the common case.
+    #
+    # A retry is ONLY for that fast failure. A *slow* reply (Audacity still busy
+    # with the previous effect, or with this command) must never be retried: each
+    # retry re-sent the command, and closing our read end while Audacity still
+    # owed us a reply made its eventual write hit a reader-less FIFO — SIGPIPE,
+    # which kills Audacity. So the worker below keeps the pipes open and waits for
+    # the reply for up to LONG_COMMAND regardless of how long the *caller* is
+    # willing to wait; execute() gives up on the caller's behalf but leaves the
+    # worker running as the reader of record (see _pending).
     _POSIX_SEND_ATTEMPTS = 6
 
     def _send_raw(self, command_str: str) -> str:
@@ -207,6 +219,8 @@ class AudacityClient:
                 if raw.strip():
                     last_raw = raw  # non-empty but no terminator: keep as fallback
             except AudacityMCPError as e:
+                if e.code == ErrorCode.PIPE_TIMEOUT:
+                    raise  # Audacity is busy, not a relay race: never re-send
                 last_err = e
             finally:
                 self._close_pipes()  # tear our ends down so the relay re-cycles
@@ -267,8 +281,16 @@ class AudacityClient:
         # Operates on the raw int fds from _posix_open_pipes. Closing is left to
         # the caller (_send_raw's retry loop), which tears the pipes down between
         # attempts so the relay can complete its cycle.
+        #
+        # The FIRST byte of the reply may take as long as Audacity needs — it
+        # only answers once its main thread is free, and after a heavy effect on
+        # a long file that can be minutes. Waiting here (up to LONG_COMMAND) is
+        # what keeps our read end open so Audacity's late write cannot SIGPIPE
+        # it. Only once the reply has started is a stall treated as a dead relay
+        # (PIPE_READ between chunks).
         import os
         import select
+        import time
 
         try:
             os.write(self._to_pipe, command_str.encode("utf-8"))
@@ -277,13 +299,24 @@ class AudacityClient:
 
         try:
             chunks = []
+            first_byte_deadline = time.monotonic() + Timeouts.LONG_COMMAND
             while True:
-                # Gate each read so a silent relay can't hang us forever.
-                ready, _, _ = select.select([self._from_pipe], [], [], Timeouts.PIPE_READ)
+                if chunks:
+                    wait = Timeouts.PIPE_READ
+                else:
+                    wait = max(0.0, first_byte_deadline - time.monotonic())
+                ready, _, _ = select.select([self._from_pipe], [], [], wait)
                 if not ready:
+                    if chunks:
+                        raise AudacityMCPError(
+                            ErrorCode.PIPE_TIMEOUT,
+                            f"Pipe read timed out after {Timeouts.PIPE_READ}s mid-reply — "
+                            "Audacity may have stopped responding",
+                        )
                     raise AudacityMCPError(
                         ErrorCode.PIPE_TIMEOUT,
-                        f"Pipe read timed out after {Timeouts.PIPE_READ}s — Audacity may have stopped responding",
+                        f"No reply from Audacity within {Timeouts.LONG_COMMAND}s — "
+                        "it may be stuck (a modal dialog?) or have stopped responding",
                     )
                 chunk = os.read(self._from_pipe, 65536)
                 if not chunk:  # EOF: relay closed its write end
@@ -298,49 +331,71 @@ class AudacityClient:
         except OSError as e:
             raise AudacityMCPError(ErrorCode.PIPE_READ_FAILED, str(e))
 
-    async def execute(self, command: str, extra_params: dict | None = None, **params) -> dict:
-        cmd_str = format_command(command, extra_params=extra_params, **params)
+    async def _await_pending(self, timeout: float, command: str) -> None:
+        # A previous command's worker is still waiting for Audacity's reply. It
+        # owns the pipes, so nothing may be sent until it finishes. Wait for it
+        # within this command's own budget; if Audacity is still busy after
+        # that, refuse without touching the pipe — a clean "busy, retry later"
+        # rather than a second command queued behind the first.
+        pending = self._pending
+        if pending is None:
+            return
+        fut, prev_command = pending
+        try:
+            await asyncio.wait_for(asyncio.shield(fut), timeout=timeout)
+        except (asyncio.TimeoutError, TimeoutError):
+            raise AudacityMCPError(
+                ErrorCode.PIPE_TIMEOUT,
+                f"Audacity is still busy finishing an earlier command ({prev_command}); "
+                f"{command} was not sent. Wait for Audacity to become idle and retry.",
+            )
+        except Exception:  # noqa: S110 - the worker's own outcome was already reported to its caller
+            pass
+        self._pending = None
+
+    async def _run(self, command: str, cmd_str: str, timeout: float) -> dict:
         async with self._lock:
-            loop = asyncio.get_event_loop()
+            await self._await_pending(timeout, command)
+            loop = asyncio.get_running_loop()
+            fut = loop.run_in_executor(None, self._send_raw, cmd_str)
             try:
-                raw = await asyncio.wait_for(
-                    loop.run_in_executor(None, self._send_raw, cmd_str),
-                    timeout=Timeouts.COMMAND,
-                )
+                raw = await asyncio.wait_for(asyncio.shield(fut), timeout=timeout)
             except (asyncio.TimeoutError, TimeoutError):
-                self._close_pipes()
+                # The caller stops waiting, but the worker must NOT be torn down:
+                # it stays as the reader of record until Audacity's reply lands
+                # (or LONG_COMMAND passes), so the late write never hits a closed
+                # FIFO. Closing the fds here from the event-loop thread — the
+                # old behaviour — was exactly what killed Audacity with SIGPIPE.
+                self._pending = (fut, command)
                 raise AudacityMCPError(
                     ErrorCode.PIPE_TIMEOUT,
-                    f"Command timed out after {Timeouts.COMMAND}s: {command}",
+                    f"Command timed out after {timeout}s: {command}. Audacity is still busy; "
+                    "its reply will be collected in the background and the next command "
+                    "waits for it.",
                 )
             except AudacityMCPError:
                 raise
             except Exception as e:
-                self._close_pipes()
                 raise AudacityMCPError(ErrorCode.COMMAND_FAILED, str(e))
         return parse_response(raw)
+
+    async def execute(self, command: str, extra_params: dict | None = None, **params) -> dict:
+        cmd_str = format_command(command, extra_params=extra_params, **params)
+        return await self._run(command, cmd_str, Timeouts.COMMAND)
 
     async def execute_long(self, command: str, extra_params: dict | None = None, **params) -> dict:
         cmd_str = format_command(command, extra_params=extra_params, **params)
-        async with self._lock:
-            loop = asyncio.get_event_loop()
-            try:
-                raw = await asyncio.wait_for(
-                    loop.run_in_executor(None, self._send_raw, cmd_str),
-                    timeout=Timeouts.LONG_COMMAND,
-                )
-            except (asyncio.TimeoutError, TimeoutError):
-                self._close_pipes()
-                raise AudacityMCPError(
-                    ErrorCode.PIPE_TIMEOUT,
-                    f"Long command timed out after {Timeouts.LONG_COMMAND}s: {command}",
-                )
-            except AudacityMCPError:
-                raise
-            except Exception as e:
-                self._close_pipes()
-                raise AudacityMCPError(ErrorCode.COMMAND_FAILED, str(e))
-        return parse_response(raw)
+        return await self._run(command, cmd_str, Timeouts.LONG_COMMAND)
+
+    def close_sync(self) -> None:
+        """Close the pipes; safe to register with atexit.
+
+        (Registering the async close() there only built a coroutine object at
+        exit that was never awaited: nothing got closed and Python warned.)
+        """
+        if self._pending is not None:
+            return  # the worker owns the pipes and closes them when the reply lands
+        self._close_pipes()
 
     async def close(self):
-        self._close_pipes()
+        self.close_sync()

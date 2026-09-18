@@ -7,7 +7,7 @@ from audacity_mcp.tool_registry import register_all_tools
 
 mcp = FastMCP("AudacityMCP")
 client = AudacityClient()
-atexit.register(client.close)
+atexit.register(client.close_sync)  # sync: an async close() would never be awaited here
 
 register_all_tools(mcp)
 

@@ -382,7 +382,7 @@ The installer enables this automatically, but if it didn't work (e.g. Audacity w
 | Problem | Fix |
 |---------|-----|
 | "Pipe not found" | Open Audacity first. Make sure `mod-script-pipe` is enabled (see above). Restart Audacity after enabling. |
-| "Pipe timeout" | Audacity is busy. Wait for it to finish — some effects take minutes on long files. |
+| "Pipe timeout" | Audacity is busy. Wait and retry — the late reply is drained in the background and the next command waits for it (or reports "still busy"). Some effects take minutes on long files. |
 | Connection works once then fails | The pipe disconnected (Audacity crash or restart). Just try again — AudacityMCP auto-reconnects. |
 | "Access denied" (Windows) | Audacity and your AI client must run as the same user. Don't mix admin and non-admin. |
 

@@ -356,7 +356,7 @@ We deliberately don't auto-edit this file for you — it's shared with any other
 |---------|-------|-----|
 | "Load this module?" popup on every launch | mod-script-pipe is set to "Ask" instead of "Enabled" | Edit → Preferences → Modules → change mod-script-pipe to **Enabled** (not Ask) → OK → restart |
 | "Pipe not found" | Audacity isn't running or mod-script-pipe isn't enabled | Open Audacity, enable the module (Step 1), restart |
-| "Pipe timeout" | Audacity is busy with a long operation | Wait for it to finish — some effects take up to 2 minutes |
+| "Pipe timeout" | Audacity is busy with a long operation | Wait for it to finish and retry — the bridge keeps the pipe open and drains the late reply, so Audacity is not harmed; the next command waits for it (or reports "still busy"). Some effects take minutes on long files |
 | Connection works once then fails | Pipe disconnected (Audacity crash/restart) | Just try again — AudacityMCP auto-reconnects |
 | "Access denied" (Windows) | Running Audacity and client as different users | Run both as the same user (don't mix admin/non-admin) |
 | Pipes missing in /tmp (macOS/Linux) | Audacity didn't create them | Check Audacity is running, check console for errors |
