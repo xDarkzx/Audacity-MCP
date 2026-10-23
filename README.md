@@ -551,6 +551,12 @@ Your support helps keep this project maintained and free for everyone.
 
 ---
 
+## Hiring / Consulting
+
+Need a custom MCP server, a native plugin/IPC integration, or a local AI pipeline built for your product? This repo and its sibling projects — [Reaper-MCP](https://github.com/xDarkzx/Reaper-MCP), [SongForge-MCP](https://github.com/xDarkzx/SongForge-MCP) — are public, working examples of exactly that. Open to contract work: **dkstudiosnz@gmail.com**.
+
+---
+
 ## Documentation
 
 - **[Installation Guide](docs/INSTALLATION.md)** — Detailed setup for Windows, macOS, Linux
