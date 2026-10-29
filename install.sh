@@ -281,7 +281,7 @@ if [ ! -f "$AUD_CFG" ]; then
     else
         echo "  Or enable it manually: Edit > Preferences > Modules > mod-script-pipe > Enabled"
     fi
-elif grep -q "mod-script-pipe=1" "$AUD_CFG" 2>/dev/null; then
+elif grep -q "^mod-script-pipe=1$" "$AUD_CFG" 2>/dev/null; then
     echo "  mod-script-pipe is already enabled - skipping."
 elif [ "$DRY_RUN" = "1" ]; then
     echo "  [dry-run] Would prompt to modify: $AUD_CFG"
@@ -303,9 +303,11 @@ else
         # Back up Audacity config
         cp "$AUD_CFG" "$AUD_CFG.bak"
 
-        if grep -q "mod-script-pipe=" "$AUD_CFG" 2>/dev/null; then
+        if grep -q "^mod-script-pipe=[0-9]$" "$AUD_CFG" 2>/dev/null; then
             # Replace existing setting
-            sed -i.tmp 's/mod-script-pipe=[02]/mod-script-pipe=1/' "$AUD_CFG"
+            # Anchored: the cfg also has mod-script-pipe=<path> and =<timestamp> lines.
+            # Status 4 is Audacity's "new" state on first launch.
+            sed -i.tmp 's/^mod-script-pipe=[0-9]$/mod-script-pipe=1/' "$AUD_CFG"
             rm -f "$AUD_CFG.tmp"
         elif grep -q '\[ModulePath\]' "$AUD_CFG" 2>/dev/null; then
             # Add before [ModulePath] section
