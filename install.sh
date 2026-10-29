@@ -61,7 +61,7 @@ else
         echo " Python already installed - install it, then re-run with --dry-run."
         exit 0
     fi
-    read -rp " Would you like to install Python now? (y/n): " INSTALL_PY
+    read -rp " Would you like to install Python now? (y/n): " INSTALL_PY || INSTALL_PY=n
     if [[ "$INSTALL_PY" =~ ^[Yy]$ ]]; then
         if [[ "$OSTYPE" == "darwin"* ]]; then
             if command -v brew &> /dev/null; then
@@ -169,13 +169,51 @@ else
         fi
     fi
 
-    $PYTHON -m pip install --upgrade pip >/dev/null 2>&1
-    if ! $PYTHON -m pip install "$SCRIPT_DIR"; then
-        echo ""
-        echo " ERROR: pip install failed."
-        echo " Try: $PYTHON -m pip install --user \"$SCRIPT_DIR\""
-        fail_exit
+    # Upgrading pip is best-effort: it's refused on externally-managed
+    # Pythons (PEP 668, e.g. Homebrew), and under set -e that would
+    # silently abort the whole installer.
+    if ! $PYTHON -m pip install --upgrade pip >/dev/null 2>&1; then
+        echo "  Could not upgrade pip (continuing with the installed version)."
+        echo "pip upgrade skipped (failed)" >> "$LOG_FILE" 2>/dev/null || true
     fi
+    USED_PIPX=0
+    if ! PIP_OUT=$($PYTHON -m pip install "$SCRIPT_DIR" 2>&1); then
+        echo "$PIP_OUT" >> "$LOG_FILE" 2>/dev/null || true
+        if [[ "$PIP_OUT" == *"externally-managed-environment"* ]]; then
+            # PEP 668 Python (e.g. Homebrew): pip refuses to install into it.
+            # pipx installs the app into its own isolated environment instead.
+            echo "  This Python is managed by your OS/Homebrew (PEP 668), so pip won't"
+            echo "  install into it. Using pipx instead."
+            if ! command -v pipx &> /dev/null; then
+                if command -v brew &> /dev/null; then
+                    read -rp "  pipx is not installed. Install it with Homebrew now? (y/n): " INSTALL_PIPX || INSTALL_PIPX=n
+                    if [[ "$INSTALL_PIPX" =~ ^[Yy]$ ]]; then
+                        brew install pipx || true
+                    fi
+                fi
+            fi
+            if ! command -v pipx &> /dev/null; then
+                echo ""
+                echo " ERROR: pipx is required here but is not available."
+                echo " Install it (brew install pipx / apt install pipx), then run this installer again."
+                fail_exit
+            fi
+            if ! pipx install --force "$SCRIPT_DIR"; then
+                echo ""
+                echo " ERROR: pipx install failed."
+                fail_exit
+            fi
+            USED_PIPX=1
+            PIP_OUT=""
+        else
+            echo "$PIP_OUT"
+            echo ""
+            echo " ERROR: pip install failed."
+            echo " Try: $PYTHON -m pip install --user \"$SCRIPT_DIR\""
+            fail_exit
+        fi
+    fi
+    [ -n "$PIP_OUT" ] && echo "$PIP_OUT"
     echo "  audacity-mcp installed successfully!"
     echo "audacity-mcp installed successfully" >> "$LOG_FILE" 2>/dev/null || true
 fi
@@ -191,7 +229,13 @@ fi
 # regardless of what's on PATH.
 AUDACITY_MCP_CMD="audacity-mcp"
 SCRIPTS_DIR=$($PYTHON -c "import sysconfig; print(sysconfig.get_path('scripts'))" 2>/dev/null) || SCRIPTS_DIR=""
-if [ -n "$SCRIPTS_DIR" ] && [ -x "$SCRIPTS_DIR/audacity-mcp" ]; then
+if [ "${USED_PIPX:-0}" = "1" ]; then
+    # pipx puts the launcher in its own bin dir, not the Python scripts dir.
+    PIPX_BIN="$(pipx environment --value PIPX_BIN_DIR 2>/dev/null || echo "$HOME/.local/bin")"
+    if [ -x "$PIPX_BIN/audacity-mcp" ]; then
+        AUDACITY_MCP_CMD="$PIPX_BIN/audacity-mcp"
+    fi
+elif [ -n "$SCRIPTS_DIR" ] && [ -x "$SCRIPTS_DIR/audacity-mcp" ]; then
     AUDACITY_MCP_CMD="$SCRIPTS_DIR/audacity-mcp"
 fi
 echo "Resolved audacity-mcp command: $AUDACITY_MCP_CMD" >> "$LOG_FILE" 2>/dev/null || true
@@ -233,7 +277,7 @@ elif [ "$DRY_RUN" = "1" ]; then
 else
     echo ""
     echo "  AudacityMCP needs mod-script-pipe enabled to control Audacity."
-    read -rp "  Would you like to modify the Audacity config to allow MCP access? (y/n): " ENABLE_PIPE
+    read -rp "  Would you like to modify the Audacity config to allow MCP access? (y/n): " ENABLE_PIPE || ENABLE_PIPE=n
     if [[ ! "$ENABLE_PIPE" =~ ^[Yy]$ ]]; then
         echo ""
         echo "  Skipped. You can enable it manually:"
@@ -296,7 +340,7 @@ if [ "$DRY_RUN" = "1" ]; then
         echo "  [dry-run] with a fresh mcpServers block containing the audacity entry"
     fi
 else
-    read -rp "  Configure Claude Desktop now? (y/n): " CONFIGURE_CLAUDE
+    read -rp "  Configure Claude Desktop now? (y/n): " CONFIGURE_CLAUDE || CONFIGURE_CLAUDE=n
     if [[ ! "$CONFIGURE_CLAUDE" =~ ^[Yy]$ ]]; then
         echo ""
         echo "  Skipped. To add it yourself later: open Claude Desktop -> Settings ->"
