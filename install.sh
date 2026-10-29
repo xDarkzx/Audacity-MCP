@@ -198,7 +198,20 @@ else
                 echo " Install it (brew install pipx / apt install pipx), then run this installer again."
                 fail_exit
             fi
-            if ! pipx install --force "$SCRIPT_DIR"; then
+            # Dependencies (onnxruntime via faster-whisper) lag behind the newest
+            # CPython, so don't let pipx pick up a brand-new default interpreter.
+            PIPX_PY="$PYTHON"
+            if [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -ge 15 ]; then
+                for v in 3.14 3.13 3.12 3.11 3.10; do
+                    if command -v "python$v" &> /dev/null; then
+                        PIPX_PY="python$v"
+                        break
+                    fi
+                done
+                echo "  Python $PY_MAJOR.$PY_MINOR is too new for some dependencies; using $PIPX_PY for pipx."
+            fi
+            echo "pipx interpreter: $PIPX_PY" >> "$LOG_FILE" 2>/dev/null || true
+            if ! pipx install --force --python "$PIPX_PY" "$SCRIPT_DIR"; then
                 echo ""
                 echo " ERROR: pipx install failed."
                 fail_exit
