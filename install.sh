@@ -177,7 +177,12 @@ else
         echo "pip upgrade skipped (failed)" >> "$LOG_FILE" 2>/dev/null || true
     fi
     USED_PIPX=0
-    if ! PIP_OUT=$($PYTHON -m pip install "$SCRIPT_DIR" 2>&1); then
+    # tee shows pip's progress live (dependency downloads can take minutes)
+    # while keeping a copy to check; with pipefail the status is pip's.
+    PIP_TMP="$(mktemp)"
+    if ! $PYTHON -m pip install "$SCRIPT_DIR" 2>&1 | tee "$PIP_TMP"; then
+        PIP_OUT="$(cat "$PIP_TMP")"
+        rm -f "$PIP_TMP"
         echo "$PIP_OUT" >> "$LOG_FILE" 2>/dev/null || true
         if [[ "$PIP_OUT" == *"externally-managed-environment"* ]]; then
             # PEP 668 Python (e.g. Homebrew): pip refuses to install into it.
@@ -208,7 +213,12 @@ else
                         break
                     fi
                 done
-                echo "  Python $PY_MAJOR.$PY_MINOR is too new for some dependencies; using $PIPX_PY for pipx."
+                if [ "$PIPX_PY" = "$PYTHON" ]; then
+                    echo "  Python $PY_MAJOR.$PY_MINOR may be too new for some dependencies and no"
+                    echo "  python3.10-3.14 was found; trying $PYTHON anyway."
+                else
+                    echo "  Python $PY_MAJOR.$PY_MINOR is too new for some dependencies; using $PIPX_PY for pipx."
+                fi
             fi
             echo "pipx interpreter: $PIPX_PY" >> "$LOG_FILE" 2>/dev/null || true
             if ! pipx install --force --python "$PIPX_PY" "$SCRIPT_DIR"; then
@@ -217,16 +227,14 @@ else
                 fail_exit
             fi
             USED_PIPX=1
-            PIP_OUT=""
         else
-            echo "$PIP_OUT"
             echo ""
             echo " ERROR: pip install failed."
             echo " Try: $PYTHON -m pip install --user \"$SCRIPT_DIR\""
             fail_exit
         fi
     fi
-    [ -n "$PIP_OUT" ] && echo "$PIP_OUT"
+    rm -f "$PIP_TMP"
     echo "  audacity-mcp installed successfully!"
     echo "audacity-mcp installed successfully" >> "$LOG_FILE" 2>/dev/null || true
 fi
@@ -311,7 +319,9 @@ else
             rm -f "$AUD_CFG.tmp"
         elif grep -q '\[ModulePath\]' "$AUD_CFG" 2>/dev/null; then
             # Add before [ModulePath] section
-            sed -i.tmp 's/\[ModulePath\]/mod-script-pipe=1\n[ModulePath]/' "$AUD_CFG"
+            # awk, not sed: BSD/macOS sed doesn't expand \n in the replacement.
+            awk '/^\[ModulePath\]/{print "mod-script-pipe=1"} {print}' "$AUD_CFG" > "$AUD_CFG.tmp"
+            cat "$AUD_CFG.tmp" > "$AUD_CFG"
             rm -f "$AUD_CFG.tmp"
         else
             # Append to end
